@@ -10,9 +10,9 @@ import {
   ChevronLeft,
   Settings,
   X,
-  Save,
   AlertTriangle,
-  Search
+  Search,
+  WifiOff
 } from 'lucide-react';
 
 // Components
@@ -54,13 +54,29 @@ function App() {
   // Edit Apartment Modal
   const [editingApartment, setEditingApartment] = useState<Apartment | null>(null);
 
+  // Offline State
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+
   // --- Effects ---
   useEffect(() => {
     setApartments(loadApartments());
+    
+    // Offline detection listeners
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
     // Open sidebar by default on larger screens
     if (window.innerWidth >= 768) {
       setIsSidebarOpen(true);
     }
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
   }, []);
 
   useEffect(() => {
@@ -166,6 +182,14 @@ function App() {
   return (
     <div className="flex h-screen bg-slate-50/50 overflow-hidden font-sans text-slate-900 selection:bg-blue-100 selection:text-blue-900">
       
+      {/* Offline Banner */}
+      {!isOnline && (
+        <div className="fixed top-0 left-0 right-0 z-[60] bg-amber-500 text-white text-xs font-bold text-center py-1 px-4 shadow-md flex items-center justify-center gap-2">
+          <WifiOff size={14} />
+          You are offline. Changes are saved to your device and will sync when connection returns.
+        </div>
+      )}
+
       {/* Mobile Sidebar Backdrop */}
       {isSidebarOpen && (
         <div 
@@ -180,6 +204,7 @@ function App() {
           fixed inset-y-0 left-0 z-40 bg-white border-r border-slate-200/60 shadow-2xl flex flex-col transition-all duration-300 ease-in-out
           md:relative md:shadow-none
           ${isSidebarOpen ? 'translate-x-0 w-80' : '-translate-x-full w-80 md:w-0 md:translate-x-0 md:overflow-hidden'}
+          ${!isOnline ? 'pt-6' : ''} /* Adjust for banner */
         `}
       >
         <div className="p-5 flex items-center justify-between bg-white shrink-0">
@@ -311,7 +336,7 @@ function App() {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col h-full overflow-hidden relative w-full bg-slate-50/50">
+      <main className={`flex-1 flex flex-col h-full overflow-hidden relative w-full bg-slate-50/50 ${!isOnline ? 'pt-6' : ''}`}>
         
         {/* Mobile Header (Visible only on mobile) */}
         <div className="md:hidden flex flex-col bg-white/80 backdrop-blur-md border-b border-slate-200/60 sticky top-0 z-20">
