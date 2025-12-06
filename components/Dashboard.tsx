@@ -12,7 +12,7 @@ import {
   Cell,
   Legend
 } from 'recharts';
-import { Sparkles, Loader2, TrendingUp, Users, Wallet, ArrowRight } from 'lucide-react';
+import { Sparkles, Loader2, TrendingUp, Users, Wallet, ArrowRight, Building, Map } from 'lucide-react';
 import { Apartment, Room } from '../types';
 import { generateFundraisingInsights } from '../services/geminiService';
 import { STATUS_CONFIG } from '../constants';
@@ -236,7 +236,114 @@ const Dashboard: React.FC<DashboardProps> = ({ apartments }) => {
             </ResponsiveContainer>
           </div>
         </div>
+      </div>
 
+      {/* Heatmaps Section */}
+      <div className="space-y-4">
+         <h2 className="flex items-center gap-2 text-xl font-bold text-slate-800">
+            <Map size={24} className="text-blue-500" />
+            Campaign Heatmaps
+         </h2>
+         <p className="text-slate-500 text-sm">Visual overview of door knocking progress. Identify gaps and patterns by building.</p>
+         
+         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+            {apartments.map(apt => {
+               // Calculate local stats
+               let aptVisited = 0;
+               let aptTotal = 0;
+               Object.values(apt.rooms).flat().forEach(r => {
+                 aptTotal++;
+                 if (r.status !== 'unvisited') aptVisited++;
+               });
+               const percentage = aptTotal === 0 ? 0 : Math.round((aptVisited / aptTotal) * 100);
+               const floors = Object.keys(apt.rooms).sort((a, b) => Number(b) - Number(a));
+
+               return (
+                 <div key={apt.id} className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden flex flex-col">
+                    {/* Card Header */}
+                    <div className="p-5 border-b border-slate-50 bg-slate-50/30">
+                       <div className="flex justify-between items-start mb-3">
+                          <h3 className="font-bold text-slate-700 truncate pr-4">{apt.name}</h3>
+                          <span className="text-xs font-mono font-bold text-slate-400 bg-white px-2 py-1 rounded border border-slate-200">
+                            {percentage}%
+                          </span>
+                       </div>
+                       
+                       {/* Progress Bar */}
+                       <div className="w-full h-2.5 bg-slate-200 rounded-full overflow-hidden">
+                          <div 
+                             className="h-full bg-blue-500 rounded-full transition-all duration-1000 ease-out"
+                             style={{ width: `${percentage}%` }}
+                          />
+                       </div>
+                       <div className="flex justify-between mt-1.5">
+                          <span className="text-[10px] uppercase font-bold text-slate-400">Progress</span>
+                          <span className="text-[10px] font-medium text-slate-500">{aptVisited} / {aptTotal} units</span>
+                       </div>
+                    </div>
+
+                    {/* Heatmap Grid */}
+                    <div className="p-5 overflow-x-auto">
+                       <div className="min-w-max">
+                          {floors.map(floor => (
+                             <div key={floor} className="flex items-center gap-2 mb-1.5">
+                                {/* Floor Label */}
+                                <div className="w-6 text-[10px] font-bold text-slate-400 text-right shrink-0">{floor}</div>
+                                
+                                {/* Units Row */}
+                                <div className="flex gap-1.5">
+                                   {apt.rooms[floor].map(room => {
+                                      const config = STATUS_CONFIG[room.status];
+                                      return (
+                                         <div 
+                                            key={room.id}
+                                            className={`w-4 h-4 rounded-[3px] transition-colors cursor-help ${config.bg.replace('bg-', 'bg-').replace(' border-amber-200', '').replace(' border-green-200', '').replace(' border-red-200', '').replace(' border-gray-200', '')}`}
+                                            // Override simplistic bg parsing for heatmap clarity
+                                            style={{
+                                               backgroundColor: 
+                                                  room.status === 'donated' ? '#10b981' : 
+                                                  room.status === 'not_interested' ? '#ef4444' : 
+                                                  room.status === 'callback' ? '#f59e0b' : 
+                                                  room.status === 'other' ? '#94a3b8' : '#e2e8f0'
+                                            }}
+                                            title={`Unit ${room.roomNumber}: ${config.label}`}
+                                         />
+                                      )
+                                   })}
+                                </div>
+                             </div>
+                          ))}
+                       </div>
+                       
+                       {/* Heatmap Legend */}
+                       <div className="mt-4 flex flex-wrap gap-3 justify-center pt-3 border-t border-slate-50">
+                          {Object.entries(STATUS_CONFIG).map(([key, config]) => {
+                             if(key === 'unvisited') return null;
+                             return (
+                                <div key={key} className="flex items-center gap-1.5">
+                                   <div 
+                                      className="w-2.5 h-2.5 rounded-[2px]" 
+                                      style={{
+                                         backgroundColor: 
+                                            key === 'donated' ? '#10b981' : 
+                                            key === 'not_interested' ? '#ef4444' : 
+                                            key === 'callback' ? '#f59e0b' : '#94a3b8'
+                                      }}
+                                   />
+                                   <span className="text-[10px] font-medium text-slate-500">{config.label}</span>
+                                </div>
+                             )
+                          })}
+                          <div className="flex items-center gap-1.5">
+                              <div className="w-2.5 h-2.5 rounded-[2px] bg-slate-200" />
+                              <span className="text-[10px] font-medium text-slate-500">Unvisited</span>
+                          </div>
+                       </div>
+                    </div>
+                 </div>
+               )
+            })}
+         </div>
       </div>
     </div>
   );
