@@ -70,7 +70,9 @@ export const updateRoomInApartment = (
 
     newRooms[floor] = newRooms[floor].map(r => {
       if (r.id === roomId) {
-        return { ...r, ...updates, updatedAt: Date.now() };
+        // Use provided updatedAt, or default to Date.now() if not provided but other updates exist
+        const newTimestamp = updates.updatedAt !== undefined ? updates.updatedAt : Date.now();
+        return { ...r, ...updates, updatedAt: newTimestamp };
       }
       return r;
     });

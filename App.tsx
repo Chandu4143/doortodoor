@@ -12,7 +12,10 @@ import {
   X,
   AlertTriangle,
   Search,
-  WifiOff
+  WifiOff,
+  Clock,
+  Calendar,
+  Filter
 } from 'lucide-react';
 
 // Components
@@ -38,8 +41,9 @@ function App() {
   const [selectedFloor, setSelectedFloor] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'dashboard' | 'apartment'>('dashboard');
   
-  // Search State
+  // Search & Filter State
   const [searchQuery, setSearchQuery] = useState('');
+  const [timeFilter, setTimeFilter] = useState<'all' | 'today' | 'yesterday'>('all');
   
   // Modal State
   const [editingRoom, setEditingRoom] = useState<{ roomId: string, floor: string, apartmentId: string } | null>(null);
@@ -89,6 +93,7 @@ function App() {
   useEffect(() => {
     setSearchQuery('');
     setSelectedFloor(null);
+    setTimeFilter('all');
   }, [selectedApartmentId]);
 
   // --- Actions ---
@@ -177,6 +182,46 @@ function App() {
     if (!activeApartment) return [];
     return Object.keys(activeApartment.rooms).sort((a, b) => Number(b) - Number(a));
   }, [activeApartment]);
+
+  // --- Helpers ---
+  const checkTimeFilter = (timestamp: number | null) => {
+    if (timeFilter === 'all') return true;
+    if (!timestamp) return false;
+    
+    const date = new Date(timestamp);
+    const now = new Date();
+    
+    if (timeFilter === 'today') {
+      return date.toDateString() === now.toDateString();
+    }
+    
+    if (timeFilter === 'yesterday') {
+      const yesterday = new Date(now);
+      yesterday.setDate(yesterday.getDate() - 1);
+      return date.toDateString() === yesterday.toDateString();
+    }
+    
+    return true;
+  };
+
+  const formatVisitTime = (timestamp: number | null) => {
+    if (!timestamp) return null;
+    const date = new Date(timestamp);
+    const now = new Date();
+    const isToday = date.toDateString() === now.toDateString();
+    
+    if (isToday) {
+      return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    }
+    
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    if (date.toDateString() === yesterday.toDateString()) {
+      return 'Yesterday';
+    }
+    
+    return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  };
 
 
   return (
@@ -364,9 +409,9 @@ function App() {
             )}
           </div>
           
-          {/* Mobile Search Bar */}
+          {/* Mobile Search & Filter */}
           {activeApartment && viewMode === 'apartment' && (
-            <div className="px-4 pb-3">
+            <div className="px-4 pb-3 space-y-2">
                <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                     <Search size={16} className="text-slate-400" />
@@ -386,6 +431,24 @@ function App() {
                       <X size={14} className="text-slate-400" />
                     </button>
                   )}
+               </div>
+               
+               {/* Mobile Time Filter */}
+               <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+                 {(['all', 'today', 'yesterday'] as const).map(filter => (
+                   <button
+                    key={filter}
+                    onClick={() => setTimeFilter(filter)}
+                    className={`
+                      px-3 py-1.5 rounded-lg text-xs font-bold capitalize whitespace-nowrap border
+                      ${timeFilter === filter 
+                        ? 'bg-slate-800 text-white border-slate-800' 
+                        : 'bg-white text-slate-500 border-slate-200'}
+                    `}
+                   >
+                     {filter === 'all' ? 'All Time' : filter}
+                   </button>
+                 ))}
                </div>
             </div>
           )}
@@ -427,6 +490,27 @@ function App() {
               </div>
               
               <div className="flex items-center gap-4">
+                
+                {/* Time Filter */}
+                <div className="flex items-center bg-slate-50 rounded-xl p-1 border border-slate-200">
+                  {(['all', 'today', 'yesterday'] as const).map(filter => (
+                    <button
+                      key={filter}
+                      onClick={() => setTimeFilter(filter)}
+                      className={`
+                        px-3 py-1.5 rounded-lg text-xs font-bold capitalize transition-all
+                        ${timeFilter === filter 
+                          ? 'bg-white text-blue-600 shadow-sm' 
+                          : 'text-slate-500 hover:text-slate-700'}
+                      `}
+                    >
+                      {filter === 'all' ? 'All' : filter}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="w-px h-8 bg-slate-200"></div>
+
                 {/* Desktop Search Bar */}
                 <div className="relative group">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -448,22 +532,6 @@ function App() {
                     </button>
                   )}
                 </div>
-
-                <div className="w-px h-8 bg-slate-200"></div>
-
-                {/* Stats Chips */}
-                <div className="flex gap-2">
-                  {Object.entries(STATUS_CONFIG).slice(0, 3).map(([key, config]) => {
-                     const count = (Object.values(activeApartment.rooms).flat() as Room[]).filter(r => r.status === key).length;
-                     return (
-                       <div key={key} className={`px-4 py-2 rounded-xl text-xs font-bold border flex items-center gap-2 transition-all ${config.bg} ${config.color.replace('text', 'border')}`}>
-                          <config.icon size={16} className={config.color} />
-                          <span className="text-slate-700">{config.label}</span>
-                          <span className={`px-1.5 py-0.5 rounded-md bg-white/50 min-w-[20px] text-center ${config.color}`}>{count}</span>
-                       </div>
-                     )
-                  })}
-                </div>
               </div>
             </div>
 
@@ -484,7 +552,7 @@ function App() {
               
               {/* Responsive Floor Selector (Hidden if searching) */}
               <div className={`
-                ${searchQuery ? 'hidden' : 'flex'}
+                ${searchQuery || timeFilter !== 'all' ? 'hidden' : 'flex'}
                 w-full md:w-20 
                 bg-white md:bg-white
                 border-b md:border-b-0 md:border-r border-slate-200/60 
@@ -532,23 +600,28 @@ function App() {
               {/* Room Grid */}
               <div className="flex-1 overflow-y-auto p-3 sm:p-6 md:p-8 bg-slate-50/30">
                 {sortedFloors.map(floor => {
-                  // Filter rooms based on search query
+                  // Filter rooms based on search query and Time Filter
                   const floorRooms = activeApartment.rooms[floor];
                   const filteredRooms = floorRooms.filter(room => {
+                    // Search Logic
                     const q = searchQuery.toLowerCase();
-                    if (!q) return true;
-                    return (
+                    const matchesSearch = !q || (
                       room.roomNumber.toString().includes(q) ||
                       (room.visitorName && room.visitorName.toLowerCase().includes(q)) ||
                       (room.remark && room.remark.toLowerCase().includes(q))
                     );
+
+                    // Time Logic
+                    const matchesTime = checkTimeFilter(room.updatedAt);
+
+                    return matchesSearch && matchesTime;
                   });
 
                   // If filtering, and floor has no matches, skip rendering
-                  if (searchQuery && filteredRooms.length === 0) return null;
+                  if ((searchQuery || timeFilter !== 'all') && filteredRooms.length === 0) return null;
 
                   // If not filtering, check floor selection
-                  if (!searchQuery && selectedFloor !== null && selectedFloor !== floor) return null;
+                  if (!searchQuery && timeFilter === 'all' && selectedFloor !== null && selectedFloor !== floor) return null;
 
                   return (
                     <div key={floor} className="mb-8 animate-in fade-in slide-in-from-bottom-2 duration-500">
@@ -566,6 +639,8 @@ function App() {
                         {filteredRooms.map(room => {
                           const status = STATUS_CONFIG[room.status];
                           const Icon = status.icon;
+                          const visitTime = formatVisitTime(room.updatedAt);
+                          
                           return (
                             <div 
                               key={room.id}
@@ -573,7 +648,7 @@ function App() {
                               className={`
                                 group relative bg-white border rounded-2xl p-4 cursor-pointer transition-all duration-200
                                 hover:shadow-xl hover:shadow-slate-200/50 hover:-translate-y-1 active:scale-95 active:shadow-none
-                                flex flex-col justify-between min-h-[130px]
+                                flex flex-col justify-between min-h-[140px]
                                 ${room.status === 'unvisited' ? 'border-slate-100 hover:border-slate-300' : ''}
                                 ${room.status === 'donated' ? 'border-emerald-200 bg-emerald-50/10' : ''}
                                 ${room.status === 'callback' ? 'border-amber-200 bg-amber-50/10' : ''}
@@ -581,30 +656,40 @@ function App() {
                                 ${room.status === 'other' ? 'border-slate-200 bg-slate-50/50' : ''}
                               `}
                             >
-                              <div className="flex justify-between items-start">
+                              <div className="flex justify-between items-start mb-2">
                                 <span className="font-bold text-slate-800 text-xl tracking-tight">#{room.roomNumber}</span>
-                                <div className={`p-1.5 rounded-lg ${status.bg} ${status.color.replace('text-', 'text-opacity-100 text-')}`}>
-                                  <Icon size={14} strokeWidth={3} />
+                                <div className={`p-2 rounded-xl shadow-sm ${status.bg} ${status.color.replace('text-', 'text-opacity-100 text-')} transition-transform group-hover:scale-110`}>
+                                  <Icon size={20} strokeWidth={2.5} />
                                 </div>
                               </div>
                               
-                              <div className="mt-3">
+                              <div className="flex-1">
                                 {room.visitorName ? (
-                                  <p className="text-sm font-semibold text-slate-700 truncate">{room.visitorName}</p>
+                                  <p className="text-sm font-bold text-slate-700 truncate mb-1">{room.visitorName}</p>
                                 ) : (
-                                  <p className="text-xs text-slate-300 font-medium italic">Unknown</p>
+                                  <p className="text-xs text-slate-300 font-medium italic mb-1">Unknown Visitor</p>
                                 )}
                                 
                                 {room.status === 'donated' && room.amountDonated ? (
-                                  <p className="text-sm font-bold text-emerald-600 mt-1 flex items-center gap-0.5">
+                                  <p className="text-sm font-bold text-emerald-600 flex items-center gap-0.5">
                                     <span className="text-[10px]">₹</span>{room.amountDonated}
                                   </p>
                                 ) : (
-                                  <p className="text-[10px] text-slate-400 mt-1 truncate min-h-[1.5em] font-medium">
-                                    {room.remark || room.status.replace('_', ' ')}
+                                  <p className="text-xs text-slate-500 truncate font-medium min-h-[1.5em]">
+                                    {room.remark}
                                   </p>
                                 )}
                               </div>
+                              
+                              {/* Footer: Timestamp */}
+                              {visitTime && (
+                                <div className={`mt-3 pt-3 border-t border-slate-100/50 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide
+                                  ${room.status === 'unvisited' ? 'opacity-0' : 'opacity-60'}
+                                `}>
+                                   <Clock size={10} />
+                                   {visitTime}
+                                </div>
+                              )}
                               
                               {/* Hover Action Indicator */}
                               <div className="absolute inset-0 border-2 border-blue-500 rounded-2xl opacity-0 scale-95 group-hover:opacity-0 sm:group-hover:opacity-100 sm:group-hover:scale-100 transition-all pointer-events-none" />
@@ -616,21 +701,29 @@ function App() {
                   )
                 })}
                 
-                {searchQuery && sortedFloors.every(f => 
+                {(searchQuery || timeFilter !== 'all') && sortedFloors.every(f => 
                    activeApartment.rooms[f].filter(room => {
-                     const q = searchQuery.toLowerCase();
-                     return (
-                       room.roomNumber.toString().includes(q) ||
-                       (room.visitorName && room.visitorName.toLowerCase().includes(q)) ||
-                       (room.remark && room.remark.toLowerCase().includes(q))
-                     );
+                      const q = searchQuery.toLowerCase();
+                      const matchesSearch = !q || (
+                        room.roomNumber.toString().includes(q) ||
+                        (room.visitorName && room.visitorName.toLowerCase().includes(q)) ||
+                        (room.remark && room.remark.toLowerCase().includes(q))
+                      );
+                      const matchesTime = checkTimeFilter(room.updatedAt);
+                      return matchesSearch && matchesTime;
                    }).length === 0
                 ) && (
                   <div className="text-center py-20 animate-in fade-in">
                     <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-300">
-                      <Search size={32} />
+                      {timeFilter !== 'all' ? <Calendar size={32} /> : <Search size={32} />}
                     </div>
-                    <p className="text-slate-500 font-medium">No results found for "{searchQuery}"</p>
+                    <p className="text-slate-500 font-medium">No results found for current filter</p>
+                    <button 
+                      onClick={() => {setSearchQuery(''); setTimeFilter('all');}} 
+                      className="mt-4 text-blue-600 text-sm font-bold hover:underline"
+                    >
+                      Clear Filters
+                    </button>
                   </div>
                 )}
                 

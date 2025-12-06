@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Room, RoomStatus } from '../types';
 import { STATUS_CONFIG, FUNDRAISING_SCRIPTS } from '../constants';
-import { X, Save, User, MessageSquare, StickyNote, IndianRupee, Check, BookOpen, Info, Copy } from 'lucide-react';
+import { X, Save, User, MessageSquare, StickyNote, IndianRupee, Check, BookOpen, Info, Copy, Clock, Calendar } from 'lucide-react';
 
 interface RoomModalProps {
   room: Room;
@@ -15,6 +15,14 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, isOpen, onClose, onSave }) 
   const [activeTab, setActiveTab] = useState<'details' | 'scripts'>('details');
   const [copiedScriptId, setCopiedScriptId] = useState<string | null>(null);
 
+  // Helper to format date for input type="datetime-local" (YYYY-MM-DDThh:mm)
+  const toLocalISOString = (timestamp: number) => {
+    const date = new Date(timestamp);
+    const offset = date.getTimezoneOffset() * 60000; // offset in milliseconds
+    const localISOTime = (new Date(date.getTime() - offset)).toISOString().slice(0, 16);
+    return localISOTime;
+  };
+
   useEffect(() => {
     if (isOpen) {
       setFormData({
@@ -22,7 +30,9 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, isOpen, onClose, onSave }) 
         remark: room.remark,
         status: room.status,
         note: room.note,
-        amountDonated: room.amountDonated || 0
+        amountDonated: room.amountDonated || 0,
+        // If room has a time, use it. If not, default to NOW (for the input).
+        updatedAt: room.updatedAt || Date.now()
       });
       setActiveTab('details'); // Reset to details on open
     }
@@ -97,7 +107,26 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, isOpen, onClose, onSave }) 
             <div className="space-y-8 animate-in slide-in-from-left-4 duration-300">
               {/* Status Tiles */}
               <div className="space-y-3">
-                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Current Status</label>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Current Status</label>
+                  
+                  {/* Date Time Picker */}
+                  <div className="flex items-center gap-2">
+                     <Clock size={14} className="text-slate-400" />
+                     <input 
+                        type="datetime-local"
+                        className="text-xs font-bold text-slate-500 bg-transparent border-none focus:ring-0 p-0"
+                        value={formData.updatedAt ? toLocalISOString(formData.updatedAt) : ''}
+                        onChange={(e) => {
+                          const date = new Date(e.target.value);
+                          if (!isNaN(date.getTime())) {
+                            setFormData({ ...formData, updatedAt: date.getTime() });
+                          }
+                        }}
+                     />
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-3 gap-3">
                   {(Object.keys(STATUS_CONFIG) as RoomStatus[]).map((status) => {
                     const config = STATUS_CONFIG[status];
