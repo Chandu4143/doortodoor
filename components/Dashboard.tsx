@@ -12,7 +12,7 @@ import {
   Cell,
   Legend
 } from 'recharts';
-import { Sparkles, Loader2, TrendingUp, Users, Wallet, ArrowRight, Building, Map } from 'lucide-react';
+import { Sparkles, Loader2, TrendingUp, Users, Wallet, ArrowRight, Building, Map, Target } from 'lucide-react';
 import { Apartment, Room } from '../types';
 import { generateFundraisingInsights } from '../services/geminiService';
 import { STATUS_CONFIG } from '../constants';
@@ -30,6 +30,7 @@ const Dashboard: React.FC<DashboardProps> = ({ apartments }) => {
   let visitedCount = 0;
   let donatedCount = 0;
   let totalRaised = 0;
+  let totalTarget = 0;
   
   const statusCounts: Record<string, number> = {
     unvisited: 0,
@@ -53,6 +54,7 @@ const Dashboard: React.FC<DashboardProps> = ({ apartments }) => {
       });
     });
     totalRaised += aptDonations;
+    totalTarget += (apt.targetAmount || 0);
     return { name: apt.name, donations: aptDonations };
   });
 
@@ -90,6 +92,8 @@ const Dashboard: React.FC<DashboardProps> = ({ apartments }) => {
     );
   }
 
+  const overallProgress = totalTarget > 0 ? Math.min(100, Math.round((totalRaised / totalTarget) * 100)) : 0;
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto animate-in fade-in duration-500 pb-10">
       
@@ -109,18 +113,30 @@ const Dashboard: React.FC<DashboardProps> = ({ apartments }) => {
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-5 hover:shadow-md transition-shadow">
-          <div className="w-14 h-14 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center shadow-inner">
-            <Wallet size={28} strokeWidth={2} />
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
+          <div className="flex items-center gap-5 mb-3">
+             <div className="w-14 h-14 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center shadow-inner">
+               <Wallet size={28} strokeWidth={2} />
+             </div>
+             <div>
+               <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Total Raised</p>
+               <p className="text-3xl font-bold text-slate-800">₹{totalRaised.toLocaleString()}</p>
+             </div>
           </div>
-          <div>
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Total Raised</p>
-            <p className="text-3xl font-bold text-slate-800">₹{totalRaised.toLocaleString()}</p>
-            <p className="text-xs text-emerald-600 font-bold mt-1 flex items-center gap-1">
-                <TrendingUp size={12} />
-                {donatedCount} contributions
-            </p>
-          </div>
+          {totalTarget > 0 && (
+             <div className="mt-2">
+                <div className="flex justify-between text-[10px] font-bold uppercase text-slate-400 mb-1">
+                   <span>Goal: ₹{totalTarget.toLocaleString()}</span>
+                   <span className="text-emerald-600">{overallProgress}%</span>
+                </div>
+                <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                   <div 
+                     className="h-full bg-emerald-500 rounded-full transition-all duration-1000" 
+                     style={{width: `${overallProgress}%`}}
+                   />
+                </div>
+             </div>
+          )}
         </div>
 
         {/* AI Action Card */}

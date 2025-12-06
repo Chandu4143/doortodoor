@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   Plus, 
   Trash2, 
   Download, 
+  Upload,
   Building2, 
   LayoutGrid, 
   Menu,
@@ -15,7 +16,9 @@ import {
   WifiOff,
   Clock,
   Calendar,
-  Filter
+  Filter,
+  IndianRupee,
+  Database
 } from 'lucide-react';
 
 // Components
@@ -29,7 +32,9 @@ import {
   createNewApartment, 
   updateRoomInApartment,
   resizeApartment,
-  exportToCSV 
+  exportToCSV,
+  exportBackupJSON,
+  validateAndParseImport
 } from './services/storageService';
 import { Apartment, Room } from './types';
 import { STATUS_CONFIG } from './constants';
@@ -48,12 +53,14 @@ function App() {
   // Modal State
   const [editingRoom, setEditingRoom] = useState<{ roomId: string, floor: string, apartmentId: string } | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false); // Default closed on mobile
+  const [showDataModal, setShowDataModal] = useState(false);
 
   // New Apartment Form
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [newAptName, setNewAptName] = useState('');
   const [newFloors, setNewFloors] = useState(5);
   const [newUnits, setNewUnits] = useState(4);
+  const [newTarget, setNewTarget] = useState(0);
 
   // Edit Apartment Modal
   const [editingApartment, setEditingApartment] = useState<Apartment | null>(null);
@@ -99,9 +106,10 @@ function App() {
   // --- Actions ---
   const handleCreateApartment = () => {
     if (!newAptName.trim()) return;
-    const newApt = createNewApartment(newAptName, newFloors, newUnits);
+    const newApt = createNewApartment(newAptName, newFloors, newUnits, newTarget);
     setApartments(prev => [newApt, ...prev]);
     setNewAptName('');
+    setNewTarget(0);
     setShowCreateForm(false);
     setSelectedApartmentId(newApt.id);
     setViewMode('apartment');
@@ -109,8 +117,8 @@ function App() {
     if (window.innerWidth < 768) setIsSidebarOpen(false);
   };
 
-  const handleDeleteApartment = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleDeleteApartment = (id: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
     if (confirm("Delete this apartment and all data? This cannot be undone.")) {
       setApartments(prev => prev.filter(a => a.id !== id));
       if (selectedApartmentId === id) {
@@ -146,11 +154,30 @@ function App() {
       editingApartment.id,
       editingApartment.name,
       editingApartment.floors,
-      editingApartment.unitsPerFloor
+      editingApartment.unitsPerFloor,
+      editingApartment.targetAmount
     );
 
     setApartments(updatedApts);
     setEditingApartment(null); // Close modal
+  };
+
+  const handleImportData = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      if (!confirm("This will OVERWRITE your current data with the backup file. Are you sure?")) {
+         return;
+      }
+      const importedData = await validateAndParseImport(file);
+      setApartments(importedData);
+      saveApartments(importedData);
+      alert("Data restored successfully!");
+      setShowDataModal(false);
+    } catch (err: any) {
+      alert("Import failed: " + err.message);
+    }
   };
 
   const handleNavClick = (id: string) => {
@@ -278,6 +305,13 @@ function App() {
               <LayoutGrid size={20} className={viewMode === 'dashboard' ? 'text-blue-600' : 'text-slate-400'} />
               Dashboard
             </button>
+             <button 
+              onClick={() => setShowDataModal(true)}
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-200 text-slate-500 hover:bg-slate-50 hover:text-slate-700"
+            >
+              <Database size={20} className="text-slate-400" />
+              Backup & Restore
+            </button>
           </div>
 
           {/* Apartments List */}
@@ -318,6 +352,14 @@ function App() {
                     />
                   </div>
                 </div>
+                <div>
+                   <label className="text-[10px] uppercase text-slate-400 font-bold ml-1 mb-0.5 block">Target Amount (₹)</label>
+                   <input 
+                      type="number" className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
+                      value={newTarget} onChange={e => setNewTarget(Number(e.target.value))}
+                      placeholder="e.g. 50000"
+                    />
+                </div>
                 <button 
                   onClick={handleCreateApartment}
                   className="w-full bg-blue-600 text-white text-sm py-2 rounded-lg font-bold hover:bg-blue-700 shadow-md shadow-blue-200 transition-all active:scale-95"
@@ -353,8 +395,9 @@ function App() {
                   </div>
                   <button 
                     onClick={(e) => handleDeleteApartment(apt.id, e)}
-                    className={`p-1.5 rounded-lg transition-all opacity-0 group-hover:opacity-100
+                    className={`p-1.5 rounded-lg transition-all opacity-100 md:opacity-0 md:group-hover:opacity-100 z-20
                       ${selectedApartmentId === apt.id ? 'hover:bg-slate-800 text-slate-400 hover:text-red-400' : 'hover:bg-red-50 text-slate-300 hover:text-red-500'}`}
+                    title="Delete Campaign"
                   >
                     <Trash2 size={14} />
                   </button>
@@ -375,7 +418,7 @@ function App() {
              className="group w-full flex items-center justify-center gap-2 text-xs font-bold text-slate-500 uppercase tracking-wider border border-slate-200 rounded-xl py-3 hover:bg-white hover:border-blue-200 hover:text-blue-600 hover:shadow-sm transition-all"
             >
              <Download size={16} className="group-hover:-translate-y-0.5 transition-transform" />
-             Export Data
+             Export CSV
            </button>
         </div>
       </aside>
@@ -763,6 +806,52 @@ function App() {
         />
       )}
 
+      {/* Backup/Restore Modal */}
+      {showDataModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setShowDataModal(false)} />
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 relative animate-in fade-in zoom-in-95">
+             <div className="flex justify-between items-center mb-6">
+                <h2 className="text-xl font-bold text-slate-800">Backup & Restore</h2>
+                <button onClick={() => setShowDataModal(false)} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
+             </div>
+             
+             <div className="space-y-4">
+                <div className="p-4 rounded-xl border border-slate-100 bg-slate-50/50">
+                   <h3 className="font-bold text-slate-700 mb-1 flex items-center gap-2">
+                      <Download size={16} className="text-blue-500" /> Export Backup
+                   </h3>
+                   <p className="text-xs text-slate-500 mb-3">Save a full backup file (.json) of all your campaigns and data.</p>
+                   <button 
+                      onClick={() => exportBackupJSON(apartments)}
+                      className="w-full py-2 bg-white border border-slate-200 text-slate-700 font-bold rounded-lg text-sm hover:border-blue-300 hover:text-blue-600 shadow-sm transition-colors"
+                   >
+                      Download Backup
+                   </button>
+                </div>
+
+                <div className="p-4 rounded-xl border border-slate-100 bg-slate-50/50">
+                   <h3 className="font-bold text-slate-700 mb-1 flex items-center gap-2">
+                      <Upload size={16} className="text-green-500" /> Restore Data
+                   </h3>
+                   <p className="text-xs text-slate-500 mb-3">Import a backup file. <span className="font-bold text-red-500">Warning: This overwrites current data.</span></p>
+                   
+                   <label className="w-full py-2 bg-blue-600 text-white font-bold rounded-lg text-sm hover:bg-blue-700 shadow-md shadow-blue-200 transition-colors flex items-center justify-center cursor-pointer active:scale-95">
+                      Select File to Restore
+                      <input 
+                          type="file" 
+                          accept=".json,application/json"
+                          className="hidden"
+                          onChange={handleImportData}
+                          onClick={(e) => { (e.target as HTMLInputElement).value = '' }} 
+                      />
+                   </label>
+                </div>
+             </div>
+          </div>
+        </div>
+      )}
+
       {/* Edit Apartment Modal */}
       {editingApartment && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -802,13 +891,43 @@ function App() {
                 </div>
               </div>
               
+              <div>
+                 <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Fundraising Target (₹)</label>
+                 <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                       <IndianRupee size={14} className="text-slate-400" />
+                    </div>
+                    <input 
+                      type="number"
+                      min="0"
+                      className="w-full pl-8 pr-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-100 focus:border-blue-500 outline-none font-medium"
+                      value={editingApartment.targetAmount || 0}
+                      onChange={e => setEditingApartment({...editingApartment, targetAmount: Number(e.target.value)})}
+                    />
+                 </div>
+              </div>
+
               <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex gap-3 text-amber-800 text-sm">
                  <AlertTriangle size={18} className="shrink-0 mt-0.5" />
                  <p>Reducing floors or units will permanently delete data in the removed rooms.</p>
               </div>
             </div>
 
-            <div className="mt-6 flex gap-3">
+            {/* DELETE CAMPAIGN SECTION */}
+            <div className="mt-6 pt-6 border-t border-slate-100">
+               <button
+                  onClick={(e) => {
+                     setEditingApartment(null); // Close modal
+                     handleDeleteApartment(editingApartment.id, e);
+                  }}
+                  className="w-full py-3 rounded-xl border-2 border-red-50 text-red-500 bg-red-50/50 font-bold hover:bg-red-100 hover:border-red-100 transition-colors flex items-center justify-center gap-2"
+               >
+                  <Trash2 size={18} />
+                  Delete Campaign
+               </button>
+            </div>
+
+            <div className="mt-4 flex gap-3">
               <button 
                 onClick={() => setEditingApartment(null)}
                 className="flex-1 py-2.5 rounded-xl border border-slate-200 font-semibold text-slate-600 hover:bg-slate-50"

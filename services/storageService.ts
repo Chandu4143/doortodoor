@@ -43,13 +43,14 @@ export const saveApartments = (apartments: Apartment[]) => {
   }
 };
 
-export const createNewApartment = (name: string, floors: number, unitsPerFloor: number): Apartment => {
+export const createNewApartment = (name: string, floors: number, unitsPerFloor: number, targetAmount?: number): Apartment => {
   return {
     id: uid(),
     name,
     floors,
     unitsPerFloor,
     createdAt: Date.now(),
+    targetAmount: targetAmount || 0,
     rooms: generateRooms(floors, unitsPerFloor),
   };
 };
@@ -86,7 +87,8 @@ export const resizeApartment = (
   apartmentId: string,
   newName: string,
   newFloorCount: number,
-  newUnitCount: number
+  newUnitCount: number,
+  newTargetAmount?: number
 ): Apartment[] => {
   return apartments.map(apt => {
     if (apt.id !== apartmentId) return apt;
@@ -142,6 +144,7 @@ export const resizeApartment = (
         name: newName,
         floors: newFloorCount,
         unitsPerFloor: newUnitCount,
+        targetAmount: newTargetAmount !== undefined ? newTargetAmount : apt.targetAmount,
         rooms: updatedRooms
     };
   });
@@ -149,7 +152,7 @@ export const resizeApartment = (
 
 export const exportToCSV = (apartments: Apartment[]) => {
   const rows = [
-    ["Apartment", "Floor", "Room", "Status", "Visitor Name", "Remark", "Notes", "Last Updated"]
+    ["Apartment", "Floor", "Room", "Status", "Visitor Name", "Remark", "Notes", "Last Updated", "Donation Amount"]
   ];
 
   apartments.forEach(apt => {
@@ -163,7 +166,8 @@ export const exportToCSV = (apartments: Apartment[]) => {
           room.visitorName || "",
           room.remark || "",
           room.note || "",
-          room.updatedAt ? new Date(room.updatedAt).toISOString() : ""
+          room.updatedAt ? new Date(room.updatedAt).toISOString() : "",
+          room.amountDonated ? room.amountDonated.toString() : "0"
         ]);
       });
     });
@@ -176,4 +180,39 @@ export const exportToCSV = (apartments: Apartment[]) => {
   link.href = url;
   link.download = `doorstep_export_${new Date().toISOString().slice(0,10)}.csv`;
   link.click();
+};
+
+// --- Backup & Restore ---
+
+export const exportBackupJSON = (apartments: Apartment[]) => {
+  const dataStr = JSON.stringify(apartments, null, 2);
+  const blob = new Blob([dataStr], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `doorstep_backup_${new Date().toISOString().slice(0,10)}.json`;
+  link.click();
+};
+
+export const validateAndParseImport = async (file: File): Promise<Apartment[]> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const json = JSON.parse(e.target?.result as string);
+        if (!Array.isArray(json)) {
+          throw new Error("Invalid format: Root must be an array");
+        }
+        // Basic schema check (check if first item has 'id' and 'rooms')
+        if (json.length > 0 && (!json[0].id || !json[0].rooms)) {
+             throw new Error("Invalid format: Missing required apartment fields");
+        }
+        resolve(json);
+      } catch (err) {
+        reject(err);
+      }
+    };
+    reader.onerror = () => reject(new Error("Failed to read file"));
+    reader.readAsText(file);
+  });
 };

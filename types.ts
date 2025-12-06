@@ -17,6 +17,7 @@ export interface Apartment {
   floors: number;
   unitsPerFloor: number;
   createdAt: number;
+  targetAmount?: number; // New: Fundraising Goal
   // Key is floor number (stringified), Value is array of Rooms
   rooms: Record<string, Room[]>; 
 }
