@@ -11,7 +11,8 @@ import {
   Settings,
   X,
   Save,
-  AlertTriangle
+  AlertTriangle,
+  Search
 } from 'lucide-react';
 
 // Components
@@ -36,6 +37,9 @@ function App() {
   const [selectedApartmentId, setSelectedApartmentId] = useState<string | null>(null);
   const [selectedFloor, setSelectedFloor] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'dashboard' | 'apartment'>('dashboard');
+  
+  // Search State
+  const [searchQuery, setSearchQuery] = useState('');
   
   // Modal State
   const [editingRoom, setEditingRoom] = useState<{ roomId: string, floor: string, apartmentId: string } | null>(null);
@@ -64,6 +68,12 @@ function App() {
       saveApartments(apartments);
     }
   }, [apartments]);
+
+  // Clear search and floor selection when changing apartments
+  useEffect(() => {
+    setSearchQuery('');
+    setSelectedFloor(null);
+  }, [selectedApartmentId]);
 
   // --- Actions ---
   const handleCreateApartment = () => {
@@ -304,27 +314,55 @@ function App() {
       <main className="flex-1 flex flex-col h-full overflow-hidden relative w-full bg-slate-50/50">
         
         {/* Mobile Header (Visible only on mobile) */}
-        <div className="md:hidden flex items-center justify-between p-4 bg-white/80 backdrop-blur-md border-b border-slate-200/60 sticky top-0 z-20">
-          <div className="flex items-center gap-3">
-            <button onClick={() => setIsSidebarOpen(true)} className="p-2 -ml-2 text-slate-600 hover:bg-slate-100 rounded-lg active:scale-95 transition-transform">
-              <Menu size={24} />
-            </button>
-            <div>
-              <h1 className="font-bold text-lg text-slate-800 truncate max-w-[200px] leading-tight">
-                {viewMode === 'dashboard' ? 'Dashboard' : activeApartment?.name || 'DoorStep'}
-              </h1>
-              {activeApartment && viewMode === 'apartment' && (
-                <p className="text-xs text-slate-500">{activeApartment.floors} Floors • {activeApartment.unitsPerFloor} Units</p>
-              )}
+        <div className="md:hidden flex flex-col bg-white/80 backdrop-blur-md border-b border-slate-200/60 sticky top-0 z-20">
+          <div className="flex items-center justify-between p-4 pb-2">
+            <div className="flex items-center gap-3">
+              <button onClick={() => setIsSidebarOpen(true)} className="p-2 -ml-2 text-slate-600 hover:bg-slate-100 rounded-lg active:scale-95 transition-transform">
+                <Menu size={24} />
+              </button>
+              <div>
+                <h1 className="font-bold text-lg text-slate-800 truncate max-w-[200px] leading-tight">
+                  {viewMode === 'dashboard' ? 'Dashboard' : activeApartment?.name || 'DoorStep'}
+                </h1>
+                {activeApartment && viewMode === 'apartment' && (
+                  <p className="text-xs text-slate-500">{activeApartment.floors} Floors • {activeApartment.unitsPerFloor} Units</p>
+                )}
+              </div>
             </div>
+            {activeApartment && viewMode === 'apartment' && (
+              <button 
+                onClick={() => setEditingApartment(activeApartment)}
+                className="p-2 text-slate-500 hover:bg-slate-100 rounded-lg"
+              >
+                <Settings size={20} />
+              </button>
+            )}
           </div>
+          
+          {/* Mobile Search Bar */}
           {activeApartment && viewMode === 'apartment' && (
-            <button 
-              onClick={() => setEditingApartment(activeApartment)}
-              className="p-2 text-slate-500 hover:bg-slate-100 rounded-lg"
-            >
-              <Settings size={20} />
-            </button>
+            <div className="px-4 pb-3">
+               <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Search size={16} className="text-slate-400" />
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Search name, room, remark..."
+                    className="w-full pl-9 pr-4 py-2 bg-slate-100 border-none rounded-lg text-sm focus:ring-2 focus:ring-blue-500/20 outline-none transition-all"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                  {searchQuery && (
+                    <button 
+                      onClick={() => setSearchQuery('')}
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                    >
+                      <X size={14} className="text-slate-400" />
+                    </button>
+                  )}
+               </div>
+            </div>
           )}
         </div>
 
@@ -362,18 +400,45 @@ function App() {
                   <Settings size={18} />
                 </button>
               </div>
-              <div className="flex gap-2">
+              
+              <div className="flex items-center gap-4">
+                {/* Desktop Search Bar */}
+                <div className="relative group">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Search size={16} className="text-slate-400 group-focus-within:text-blue-500 transition-colors" />
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Find unit..."
+                    className="w-48 focus:w-64 pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white focus:border-blue-300 focus:ring-4 focus:ring-blue-100 outline-none transition-all"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                  {searchQuery && (
+                    <button 
+                      onClick={() => setSearchQuery('')}
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                    >
+                      <X size={14} className="text-slate-400 hover:text-slate-600" />
+                    </button>
+                  )}
+                </div>
+
+                <div className="w-px h-8 bg-slate-200"></div>
+
                 {/* Stats Chips */}
-                {Object.entries(STATUS_CONFIG).slice(0, 3).map(([key, config]) => {
-                   const count = (Object.values(activeApartment.rooms).flat() as Room[]).filter(r => r.status === key).length;
-                   return (
-                     <div key={key} className={`px-4 py-2 rounded-xl text-xs font-bold border flex items-center gap-2 transition-all ${config.bg} ${config.color.replace('text', 'border')}`}>
-                        <config.icon size={16} className={config.color} />
-                        <span className="text-slate-700">{config.label}</span>
-                        <span className={`px-1.5 py-0.5 rounded-md bg-white/50 min-w-[20px] text-center ${config.color}`}>{count}</span>
-                     </div>
-                   )
-                })}
+                <div className="flex gap-2">
+                  {Object.entries(STATUS_CONFIG).slice(0, 3).map(([key, config]) => {
+                     const count = (Object.values(activeApartment.rooms).flat() as Room[]).filter(r => r.status === key).length;
+                     return (
+                       <div key={key} className={`px-4 py-2 rounded-xl text-xs font-bold border flex items-center gap-2 transition-all ${config.bg} ${config.color.replace('text', 'border')}`}>
+                          <config.icon size={16} className={config.color} />
+                          <span className="text-slate-700">{config.label}</span>
+                          <span className={`px-1.5 py-0.5 rounded-md bg-white/50 min-w-[20px] text-center ${config.color}`}>{count}</span>
+                       </div>
+                     )
+                  })}
+                </div>
               </div>
             </div>
 
@@ -392,19 +457,21 @@ function App() {
 
             <div className="flex-1 flex flex-col md:flex-row overflow-hidden relative">
               
-              {/* Responsive Floor Selector */}
-              <div className="
+              {/* Responsive Floor Selector (Hidden if searching) */}
+              <div className={`
+                ${searchQuery ? 'hidden' : 'flex'}
                 w-full md:w-20 
                 bg-white md:bg-white
                 border-b md:border-b-0 md:border-r border-slate-200/60 
-                flex flex-row md:flex-col 
+                flex-row md:flex-col 
                 items-center 
                 overflow-x-auto md:overflow-y-auto 
                 shrink-0 
                 gap-2 p-2 md:py-6
                 no-scrollbar
                 z-10
-              ">
+                transition-all
+              `}>
                 <span className="hidden md:block text-[10px] font-bold text-slate-400 uppercase mb-2 tracking-wider">Floor</span>
                 
                 <button
@@ -439,77 +506,106 @@ function App() {
 
               {/* Room Grid */}
               <div className="flex-1 overflow-y-auto p-3 sm:p-6 md:p-8 bg-slate-50/30">
-                {sortedFloors.filter(f => selectedFloor === null || selectedFloor === f).map(floor => (
-                  <div key={floor} className="mb-8 animate-in fade-in slide-in-from-bottom-2 duration-500">
-                    <div className="flex items-center gap-4 mb-4 sticky top-0 md:relative z-10 py-2 md:py-0 pl-1 md:pl-0">
-                      {/* Glassmorphic Floor Header for Mobile */}
-                      <div className="md:hidden absolute inset-0 bg-slate-50/90 backdrop-blur-md -mx-3 -my-2 border-b border-slate-200/50"></div>
-                      <h3 className="relative text-sm font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
-                         <div className="w-2 h-2 rounded-full bg-slate-300"></div>
-                         Floor {floor}
-                      </h3>
-                      <div className="relative h-px bg-slate-200/60 flex-1"></div>
-                    </div>
-                    
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-5 relative z-0">
-                      {activeApartment.rooms[floor].map(room => {
-                        const status = STATUS_CONFIG[room.status];
-                        const Icon = status.icon;
-                        return (
-                          <div 
-                            key={room.id}
-                            onClick={() => setEditingRoom({ roomId: room.id, floor, apartmentId: activeApartment.id })}
-                            className={`
-                              group relative bg-white border rounded-2xl p-4 cursor-pointer transition-all duration-200
-                              hover:shadow-xl hover:shadow-slate-200/50 hover:-translate-y-1 active:scale-95 active:shadow-none
-                              flex flex-col justify-between min-h-[130px]
-                              ${room.status === 'unvisited' ? 'border-slate-100 hover:border-slate-300' : ''}
-                              ${room.status === 'donated' ? 'border-emerald-200 bg-emerald-50/10' : ''}
-                              ${room.status === 'callback' ? 'border-amber-200 bg-amber-50/10' : ''}
-                              ${room.status === 'not_interested' ? 'border-red-100 bg-red-50/10' : ''}
-                              ${room.status === 'other' ? 'border-slate-200 bg-slate-50/50' : ''}
-                            `}
-                          >
-                            <div className="flex justify-between items-start">
-                              <span className="font-bold text-slate-800 text-xl tracking-tight">#{room.roomNumber}</span>
-                              <div className={`p-1.5 rounded-lg ${status.bg} ${status.color.replace('text-', 'text-opacity-100 text-')}`}>
-                                <Icon size={14} strokeWidth={3} />
+                {sortedFloors.map(floor => {
+                  // Filter rooms based on search query
+                  const floorRooms = activeApartment.rooms[floor];
+                  const filteredRooms = floorRooms.filter(room => {
+                    const q = searchQuery.toLowerCase();
+                    if (!q) return true;
+                    return (
+                      room.roomNumber.toString().includes(q) ||
+                      (room.visitorName && room.visitorName.toLowerCase().includes(q)) ||
+                      (room.remark && room.remark.toLowerCase().includes(q))
+                    );
+                  });
+
+                  // If filtering, and floor has no matches, skip rendering
+                  if (searchQuery && filteredRooms.length === 0) return null;
+
+                  // If not filtering, check floor selection
+                  if (!searchQuery && selectedFloor !== null && selectedFloor !== floor) return null;
+
+                  return (
+                    <div key={floor} className="mb-8 animate-in fade-in slide-in-from-bottom-2 duration-500">
+                      <div className="flex items-center gap-4 mb-4 sticky top-0 md:relative z-10 py-2 md:py-0 pl-1 md:pl-0">
+                        {/* Glassmorphic Floor Header for Mobile */}
+                        <div className="md:hidden absolute inset-0 bg-slate-50/90 backdrop-blur-md -mx-3 -my-2 border-b border-slate-200/50"></div>
+                        <h3 className="relative text-sm font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                           <div className="w-2 h-2 rounded-full bg-slate-300"></div>
+                           Floor {floor}
+                        </h3>
+                        <div className="relative h-px bg-slate-200/60 flex-1"></div>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-5 relative z-0">
+                        {filteredRooms.map(room => {
+                          const status = STATUS_CONFIG[room.status];
+                          const Icon = status.icon;
+                          return (
+                            <div 
+                              key={room.id}
+                              onClick={() => setEditingRoom({ roomId: room.id, floor, apartmentId: activeApartment.id })}
+                              className={`
+                                group relative bg-white border rounded-2xl p-4 cursor-pointer transition-all duration-200
+                                hover:shadow-xl hover:shadow-slate-200/50 hover:-translate-y-1 active:scale-95 active:shadow-none
+                                flex flex-col justify-between min-h-[130px]
+                                ${room.status === 'unvisited' ? 'border-slate-100 hover:border-slate-300' : ''}
+                                ${room.status === 'donated' ? 'border-emerald-200 bg-emerald-50/10' : ''}
+                                ${room.status === 'callback' ? 'border-amber-200 bg-amber-50/10' : ''}
+                                ${room.status === 'not_interested' ? 'border-red-100 bg-red-50/10' : ''}
+                                ${room.status === 'other' ? 'border-slate-200 bg-slate-50/50' : ''}
+                              `}
+                            >
+                              <div className="flex justify-between items-start">
+                                <span className="font-bold text-slate-800 text-xl tracking-tight">#{room.roomNumber}</span>
+                                <div className={`p-1.5 rounded-lg ${status.bg} ${status.color.replace('text-', 'text-opacity-100 text-')}`}>
+                                  <Icon size={14} strokeWidth={3} />
+                                </div>
                               </div>
-                            </div>
-                            
-                            <div className="mt-3">
-                              {room.visitorName ? (
-                                <p className="text-sm font-semibold text-slate-700 truncate">{room.visitorName}</p>
-                              ) : (
-                                <p className="text-xs text-slate-300 font-medium italic">Unknown</p>
-                              )}
                               
-                              {room.status === 'donated' && room.amountDonated ? (
-                                <p className="text-sm font-bold text-emerald-600 mt-1 flex items-center gap-0.5">
-                                  <span className="text-[10px]">₹</span>{room.amountDonated}
-                                </p>
-                              ) : (
-                                <p className="text-[10px] text-slate-400 mt-1 truncate min-h-[1.5em] font-medium">
-                                  {room.remark || room.status.replace('_', ' ')}
-                                </p>
-                              )}
+                              <div className="mt-3">
+                                {room.visitorName ? (
+                                  <p className="text-sm font-semibold text-slate-700 truncate">{room.visitorName}</p>
+                                ) : (
+                                  <p className="text-xs text-slate-300 font-medium italic">Unknown</p>
+                                )}
+                                
+                                {room.status === 'donated' && room.amountDonated ? (
+                                  <p className="text-sm font-bold text-emerald-600 mt-1 flex items-center gap-0.5">
+                                    <span className="text-[10px]">₹</span>{room.amountDonated}
+                                  </p>
+                                ) : (
+                                  <p className="text-[10px] text-slate-400 mt-1 truncate min-h-[1.5em] font-medium">
+                                    {room.remark || room.status.replace('_', ' ')}
+                                  </p>
+                                )}
+                              </div>
+                              
+                              {/* Hover Action Indicator */}
+                              <div className="absolute inset-0 border-2 border-blue-500 rounded-2xl opacity-0 scale-95 group-hover:opacity-0 sm:group-hover:opacity-100 sm:group-hover:scale-100 transition-all pointer-events-none" />
                             </div>
-                            
-                            {/* Hover Action Indicator */}
-                            <div className="absolute inset-0 border-2 border-blue-500 rounded-2xl opacity-0 scale-95 group-hover:opacity-0 sm:group-hover:opacity-100 sm:group-hover:scale-100 transition-all pointer-events-none" />
-                          </div>
-                        )
-                      })}
+                          )
+                        })}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
                 
-                {selectedFloor && activeApartment.rooms[selectedFloor]?.length === 0 && (
-                  <div className="text-center py-20">
+                {searchQuery && sortedFloors.every(f => 
+                   activeApartment.rooms[f].filter(room => {
+                     const q = searchQuery.toLowerCase();
+                     return (
+                       room.roomNumber.toString().includes(q) ||
+                       (room.visitorName && room.visitorName.toLowerCase().includes(q)) ||
+                       (room.remark && room.remark.toLowerCase().includes(q))
+                     );
+                   }).length === 0
+                ) && (
+                  <div className="text-center py-20 animate-in fade-in">
                     <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-300">
-                      <LayoutGrid size={32} />
+                      <Search size={32} />
                     </div>
-                    <p className="text-slate-400 font-medium">No rooms on this floor.</p>
+                    <p className="text-slate-500 font-medium">No results found for "{searchQuery}"</p>
                   </div>
                 )}
                 
