@@ -582,9 +582,10 @@ function App() {
             <div className="md:hidden bg-white px-4 py-3 border-b border-slate-100 flex overflow-x-auto gap-3 no-scrollbar shrink-0 shadow-sm z-10">
                 {Object.entries(STATUS_CONFIG).map(([key, config]) => {
                    const count = (Object.values(activeApartment.rooms).flat() as Room[]).filter(r => r.status === key).length;
+                   const Icon = config.icon;
                    return (
                      <div key={key} className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-bold border flex items-center gap-1.5 shrink-0 bg-white shadow-sm ${config.color.replace('text', 'border-')}`}>
-                        <div className={`w-2 h-2 rounded-full ${config.color.replace('text', 'bg-')}`}></div>
+                        <Icon size={14} strokeWidth={3} className={config.color} />
                         {config.label} <span className="opacity-60">({count})</span>
                      </div>
                    )
@@ -701,7 +702,7 @@ function App() {
                             >
                               <div className="flex justify-between items-start mb-2">
                                 <span className="font-bold text-slate-800 text-xl tracking-tight">#{room.roomNumber}</span>
-                                <div className={`p-2 rounded-xl shadow-sm ${status.bg} ${status.color.replace('text-', 'text-opacity-100 text-')} transition-transform group-hover:scale-110`}>
+                                <div className={`p-2.5 rounded-xl shadow-sm ${status.bg} ${status.color.replace('text-', 'text-opacity-100 text-')} transition-transform group-hover:scale-110`}>
                                   <Icon size={20} strokeWidth={2.5} />
                                 </div>
                               </div>
