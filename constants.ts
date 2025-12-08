@@ -1,13 +1,23 @@
-import { RoomStatus } from './types';
+import { RoomStatus, BusinessStatus, BusinessCategory } from './types';
 import { 
   Circle, 
   CheckCircle2, 
   XCircle, 
   Clock, 
-  HelpCircle 
+  HelpCircle,
+  CalendarCheck,
+  PhoneForwarded,
+  Building2,
+  Store,
+  UtensilsCrossed,
+  Stethoscope,
+  Briefcase,
+  Factory,
+  MoreHorizontal
 } from 'lucide-react';
 
 export const LS_KEY = "doorstep_app_v2";
+export const LS_KEY_CORPORATE = "doorstep_corporate_v1";
 
 export const STATUS_CONFIG: Record<RoomStatus, { label: string; color: string; icon: any; bg: string }> = {
   unvisited: { 
@@ -40,6 +50,56 @@ export const STATUS_CONFIG: Record<RoomStatus, { label: string; color: string; i
     bg: 'bg-gray-100 border-gray-200',
     icon: HelpCircle 
   },
+};
+
+// ===== BUSINESS/CORPORATE STATUS CONFIG =====
+export const BUSINESS_STATUS_CONFIG: Record<BusinessStatus, { label: string; color: string; icon: any; bg: string }> = {
+  unvisited: { 
+    label: 'Unvisited', 
+    color: 'text-slate-500', 
+    bg: 'bg-white',
+    icon: Circle 
+  },
+  donated: { 
+    label: 'Donated', 
+    color: 'text-green-600', 
+    bg: 'bg-green-50 border-green-200',
+    icon: CheckCircle2 
+  },
+  not_interested: { 
+    label: 'Not Interested', 
+    color: 'text-red-500', 
+    bg: 'bg-red-50 border-red-200',
+    icon: XCircle 
+  },
+  callback: { 
+    label: 'Call Back', 
+    color: 'text-amber-500', 
+    bg: 'bg-amber-50 border-amber-200',
+    icon: Clock 
+  },
+  meeting_scheduled: { 
+    label: 'Meeting Set', 
+    color: 'text-blue-500', 
+    bg: 'bg-blue-50 border-blue-200',
+    icon: CalendarCheck 
+  },
+  follow_up: { 
+    label: 'Follow Up', 
+    color: 'text-purple-500', 
+    bg: 'bg-purple-50 border-purple-200',
+    icon: PhoneForwarded 
+  },
+};
+
+export const BUSINESS_CATEGORY_CONFIG: Record<BusinessCategory, { label: string; icon: any; color: string }> = {
+  corporate: { label: 'Corporate', icon: Building2, color: 'text-blue-600' },
+  retail: { label: 'Retail Shop', icon: Store, color: 'text-orange-500' },
+  restaurant: { label: 'Restaurant', icon: UtensilsCrossed, color: 'text-red-500' },
+  clinic: { label: 'Clinic/Hospital', icon: Stethoscope, color: 'text-emerald-500' },
+  office: { label: 'Office', icon: Briefcase, color: 'text-slate-600' },
+  factory: { label: 'Factory/Warehouse', icon: Factory, color: 'text-amber-600' },
+  other: { label: 'Other', icon: MoreHorizontal, color: 'text-gray-500' },
 };
 
 export const FUNDRAISING_SCRIPTS = [

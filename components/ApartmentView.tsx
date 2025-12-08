@@ -7,9 +7,11 @@ import {
     Calendar,
     Clock
 } from 'lucide-react';
-import { Apartment, Room } from '../types';
+import { Apartment, Room, RoomStatus } from '../types';
 import { STATUS_CONFIG } from '../constants';
 import { cn } from '../utils/cn';
+import SwipeableRoomCard from './SwipeableRoomCard';
+import FloorProgress from './FloorProgress';
 
 interface ApartmentViewProps {
     apartment: Apartment;
@@ -21,6 +23,8 @@ interface ApartmentViewProps {
     setSelectedFloor: (f: string | null) => void;
     onEditApartment: () => void;
     onRoomClick: (roomId: string, floor: string, apartmentId: string) => void;
+    onQuickStatusChange?: (roomId: string, floor: string, status: RoomStatus) => void;
+    onDonation?: () => void; // Callback for donation celebration
 }
 
 export default function ApartmentView({
@@ -32,8 +36,21 @@ export default function ApartmentView({
     selectedFloor,
     setSelectedFloor,
     onEditApartment,
-    onRoomClick
+    onRoomClick,
+    onQuickStatusChange,
+    onDonation
 }: ApartmentViewProps) {
+    
+    // Wrap quick status change to trigger celebration
+    const handleQuickStatusChange = (roomId: string, floor: string, status: RoomStatus) => {
+        if (onQuickStatusChange) {
+            onQuickStatusChange(roomId, floor, status);
+            // Trigger confetti for donations
+            if (status === 'donated' && onDonation) {
+                onDonation();
+            }
+        }
+    };
 
     // --- Derived Data ---
     const sortedFloors = useMemo(() => {
@@ -172,41 +189,48 @@ export default function ApartmentView({
             <div className="flex-1 flex flex-col md:flex-row overflow-hidden relative">
 
                 {/* Responsive Floor Selector (Hidden if searching) */}
+                {/* Floor Selector with scroll indicators */}
                 <div className={cn(
                     isFiltered ? 'hidden' : 'flex',
-                    "w-full md:w-20 bg-white dark:bg-slate-900 border-b md:border-b-0 md:border-r border-slate-200/60 dark:border-slate-800",
-                    "flex-row md:flex-col items-center overflow-x-auto md:overflow-y-auto shrink-0 gap-2 p-2 md:py-6 no-scrollbar z-10 transition-all"
+                    "relative w-full md:w-20 bg-white dark:bg-slate-900 border-b md:border-b-0 md:border-r border-slate-200/60 dark:border-slate-800",
+                    "flex-row md:flex-col items-center shrink-0 z-10 transition-all"
                 )}>
-                    <span className="hidden md:block text-[10px] font-bold text-slate-400 uppercase mb-2 tracking-wider">Floor</span>
+                    {/* Scroll fade indicators for mobile */}
+                    <div className="md:hidden absolute left-0 top-0 bottom-0 w-6 bg-gradient-to-r from-white dark:from-slate-900 to-transparent pointer-events-none z-10" />
+                    <div className="md:hidden absolute right-0 top-0 bottom-0 w-6 bg-gradient-to-l from-white dark:from-slate-900 to-transparent pointer-events-none z-10" />
+                    
+                    <div className="flex md:flex-col items-center overflow-x-auto md:overflow-y-auto gap-2 p-2 md:py-6 no-scrollbar w-full">
+                        <span className="hidden md:block text-[10px] font-bold text-slate-400 uppercase mb-2 tracking-wider">Floor</span>
 
-                    <button
-                        className={cn(
-                            "w-auto md:w-12 h-9 md:h-12 px-4 md:px-0 rounded-lg md:rounded-xl flex items-center justify-center text-xs md:text-sm font-bold transition-all shrink-0",
-                            selectedFloor === null
-                                ? "bg-slate-800 dark:bg-white text-white dark:text-slate-900 shadow-md shadow-slate-200 dark:shadow-slate-800 scale-100"
-                                : "bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700"
-                        )}
-                        onClick={() => setSelectedFloor(null)}
-                    >
-                        All
-                    </button>
-                    <div className="hidden md:block w-8 h-px bg-slate-100 dark:bg-slate-800 my-2"></div>
-                    <div className="md:hidden h-6 w-px bg-slate-200 dark:bg-slate-800 mx-1"></div>
-
-                    {sortedFloors.map(floor => (
                         <button
-                            key={floor}
-                            onClick={() => setSelectedFloor(floor)}
                             className={cn(
-                                "w-10 h-9 md:w-12 md:h-12 rounded-lg md:rounded-xl flex items-center justify-center text-sm font-bold transition-all shrink-0",
-                                selectedFloor === floor
-                                    ? "bg-blue-600 text-white shadow-md shadow-blue-200 dark:shadow-blue-900/50 scale-105"
-                                    : "bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 border border-slate-100 dark:border-slate-700 md:border-transparent"
+                                "w-auto md:w-12 h-9 md:h-12 px-4 md:px-0 rounded-lg md:rounded-xl flex items-center justify-center text-xs md:text-sm font-bold transition-all shrink-0",
+                                selectedFloor === null
+                                    ? "bg-slate-800 dark:bg-white text-white dark:text-slate-900 shadow-md shadow-slate-200 dark:shadow-slate-800 scale-100"
+                                    : "bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700"
                             )}
+                            onClick={() => setSelectedFloor(null)}
                         >
-                            {floor}
+                            All
                         </button>
-                    ))}
+                        <div className="hidden md:block w-8 h-px bg-slate-100 dark:bg-slate-800 my-2"></div>
+                        <div className="md:hidden h-6 w-px bg-slate-200 dark:bg-slate-800 mx-1"></div>
+
+                        {sortedFloors.map(floor => (
+                            <button
+                                key={floor}
+                                onClick={() => setSelectedFloor(floor)}
+                                className={cn(
+                                    "w-10 h-9 md:w-12 md:h-12 rounded-lg md:rounded-xl flex items-center justify-center text-sm font-bold transition-all shrink-0",
+                                    selectedFloor === floor
+                                        ? "bg-blue-600 text-white shadow-md shadow-blue-200 dark:shadow-blue-900/50 scale-105"
+                                        : "bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 border border-slate-100 dark:border-slate-700 md:border-transparent"
+                                )}
+                            >
+                                {floor}
+                            </button>
+                        ))}
+                    </div>
                 </div>
 
                 {/* Room Grid */}
@@ -237,6 +261,15 @@ export default function ApartmentView({
 
                         return (
                             <div key={floor} className="mb-8 animate-in slide-in-from-bottom duration-500">
+                                {/* Floor Progress Bar */}
+                                <div className="mb-4">
+                                    <FloorProgress 
+                                        floor={floor} 
+                                        rooms={floorRooms}
+                                        onNextUnvisited={(roomId) => onRoomClick(roomId, floor, apartment.id)}
+                                    />
+                                </div>
+
                                 <div className="flex items-center gap-4 mb-4 sticky top-0 md:relative z-10 py-2 md:py-0 pl-1 md:pl-0">
                                     {/* Glassmorphic Floor Header for Mobile */}
                                     <div className="md:hidden absolute inset-0 bg-slate-50/90 dark:bg-slate-900/90 backdrop-blur-md -mx-3 -my-2 border-b border-slate-200/50 dark:border-slate-800/50"></div>
@@ -253,6 +286,19 @@ export default function ApartmentView({
                                         const Icon = status.icon;
                                         const visitTime = formatVisitTime(room.updatedAt);
 
+                                        // Mobile: Use swipeable card
+                                        if (onQuickStatusChange && typeof window !== 'undefined' && window.innerWidth < 640) {
+                                            return (
+                                                <SwipeableRoomCard
+                                                    key={room.id}
+                                                    room={room}
+                                                    onStatusChange={(newStatus) => handleQuickStatusChange(room.id, floor, newStatus)}
+                                                    onClick={() => onRoomClick(room.id, floor, apartment.id)}
+                                                />
+                                            );
+                                        }
+
+                                        // Desktop: Regular card
                                         return (
                                             <div
                                                 key={room.id}

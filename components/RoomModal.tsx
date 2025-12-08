@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Room, RoomStatus } from '../types';
+import { Room, RoomStatus, SUPPORT_VALUE } from '../types';
 import { STATUS_CONFIG, FUNDRAISING_SCRIPTS } from '../constants';
-import { X, Save, User, MessageSquare, StickyNote, IndianRupee, Check, BookOpen, Info, Copy, Clock, Calendar } from 'lucide-react';
+import { X, Save, User, MessageSquare, StickyNote, IndianRupee, Check, BookOpen, Info, Copy, Clock, Calendar, Phone, Mail, MapPin, CreditCard, Heart, FileText } from 'lucide-react';
 import { cn } from '../utils/cn';
 import Modal from './ui/Modal';
+import VoiceInputButton from './ui/VoiceInputButton';
 
 interface RoomModalProps {
   room: Room;
@@ -33,6 +34,14 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, isOpen, onClose, onSave }) 
         status: room.status,
         note: room.note,
         amountDonated: room.amountDonated || 0,
+        // Donation form fields
+        donorPhone: room.donorPhone || '',
+        donorEmail: room.donorEmail || '',
+        donorAddress: room.donorAddress || '',
+        donorPAN: room.donorPAN || '',
+        receiptNumber: room.receiptNumber || '',
+        paymentMode: room.paymentMode || 'cash',
+        supportsCount: room.supportsCount || 0,
         // If room has a time, use it. If not, default to NOW (for the input).
         updatedAt: room.updatedAt || Date.now()
       });
@@ -111,13 +120,36 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, isOpen, onClose, onSave }) 
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Current Status</label>
-
-                  {/* Date Time Picker */}
-                  <div className="flex items-center gap-2">
-                    <Clock size={14} className="text-slate-400" />
+                </div>
+                
+                {/* Quick Time Presets */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase">Time:</span>
+                  {[
+                    { label: 'Now', value: Date.now() },
+                    { label: '5m ago', value: Date.now() - 5 * 60000 },
+                    { label: '30m ago', value: Date.now() - 30 * 60000 },
+                    { label: '1h ago', value: Date.now() - 60 * 60000 },
+                  ].map((preset) => (
+                    <button
+                      key={preset.label}
+                      type="button"
+                      onClick={() => setFormData({ ...formData, updatedAt: preset.value })}
+                      className={cn(
+                        "px-2 py-1 rounded-md text-[10px] font-bold transition-all",
+                        Math.abs((formData.updatedAt || 0) - preset.value) < 60000
+                          ? "bg-blue-600 text-white"
+                          : "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"
+                      )}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                  <div className="flex items-center gap-1 ml-auto">
+                    <Clock size={12} className="text-slate-400" />
                     <input
                       type="datetime-local"
-                      className="text-xs font-bold text-slate-500 dark:text-slate-400 bg-transparent border-none focus:ring-0 p-0"
+                      className="text-[10px] font-bold text-slate-500 dark:text-slate-400 bg-transparent border-none focus:ring-0 p-0 w-32"
                       value={formData.updatedAt ? toLocalISOString(formData.updatedAt) : ''}
                       onChange={(e) => {
                         const date = new Date(e.target.value);
@@ -171,10 +203,70 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, isOpen, onClose, onSave }) 
               {/* Form Fields */}
               <div className="space-y-4">
 
-                {/* Conditional Donation Amount */}
+                {/* Conditional Donation Form */}
                 {formData.status === 'donated' && (
-                  <div className="animate-in slide-in-from-top-2">
-                    <label className="text-xs font-bold text-green-600 dark:text-green-400 uppercase tracking-wider mb-1.5 block">Donation Amount</label>
+                  <div className="animate-in slide-in-from-top-2 space-y-4">
+                    {/* Supports Section */}
+                    <div className="bg-pink-50 dark:bg-pink-900/20 p-4 rounded-xl border border-pink-100 dark:border-pink-900/50">
+                      <label className="text-xs font-bold text-pink-600 dark:text-pink-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                        <Heart size={14} />
+                        Supports (1 Support = ₹{SUPPORT_VALUE.toLocaleString()})
+                      </label>
+                      <div className="flex items-center gap-3">
+                        <div className="flex gap-2">
+                          {[1, 2, 3, 5, 10].map((count) => (
+                            <button
+                              key={count}
+                              type="button"
+                              onClick={() => setFormData({ 
+                                ...formData, 
+                                supportsCount: count,
+                                amountDonated: count * SUPPORT_VALUE 
+                              })}
+                              className={cn(
+                                "w-10 h-10 rounded-lg text-sm font-bold transition-all active:scale-95",
+                                formData.supportsCount === count
+                                  ? "bg-pink-600 text-white shadow-md"
+                                  : "bg-white dark:bg-pink-900/30 text-pink-700 dark:text-pink-400 hover:bg-pink-100 dark:hover:bg-pink-900/50 border border-pink-200 dark:border-pink-800"
+                              )}
+                            >
+                              {count}
+                            </button>
+                          ))}
+                        </div>
+                        <div className="flex-1">
+                          <input
+                            type="number"
+                            min="0"
+                            value={formData.supportsCount || ''}
+                            onChange={(e) => {
+                              const count = Number(e.target.value);
+                              setFormData({ 
+                                ...formData, 
+                                supportsCount: count,
+                                amountDonated: count * SUPPORT_VALUE 
+                              });
+                            }}
+                            className="w-full px-3 py-2 bg-white dark:bg-pink-900/30 border border-pink-200 dark:border-pink-800 rounded-lg text-pink-700 dark:text-pink-400 font-bold"
+                            placeholder="Custom"
+                          />
+                        </div>
+                      </div>
+                      <p className="text-sm font-bold text-pink-700 dark:text-pink-300 mt-2">
+                        Total: ₹{((formData.supportsCount || 0) * SUPPORT_VALUE).toLocaleString()}
+                      </p>
+                    </div>
+
+                    {/* Or Custom Amount */}
+                    <div className="relative">
+                      <div className="absolute inset-0 flex items-center">
+                        <div className="w-full border-t border-slate-200 dark:border-slate-700"></div>
+                      </div>
+                      <div className="relative flex justify-center text-xs">
+                        <span className="px-2 bg-white dark:bg-slate-900 text-slate-400">or custom amount</span>
+                      </div>
+                    </div>
+
                     <div className="relative group">
                       <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                         <IndianRupee size={18} className="text-green-500" />
@@ -183,11 +275,114 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, isOpen, onClose, onSave }) 
                         type="number"
                         min="0"
                         value={formData.amountDonated}
-                        onChange={(e) => setFormData({ ...formData, amountDonated: Number(e.target.value) })}
+                        onChange={(e) => {
+                          const amount = Number(e.target.value);
+                          setFormData({ 
+                            ...formData, 
+                            amountDonated: amount,
+                            supportsCount: Math.floor(amount / SUPPORT_VALUE)
+                          });
+                        }}
                         className="w-full pl-10 pr-4 py-3 bg-green-50 dark:bg-green-900/20 border-2 border-green-100 dark:border-green-800 rounded-xl focus:outline-none focus:border-green-500 focus:ring-4 focus:ring-green-500/10 transition-all font-mono font-bold text-lg text-green-700 dark:text-green-400"
-                        placeholder="0"
-                        autoFocus
+                        placeholder="Custom amount"
                       />
+                    </div>
+
+                    {/* Donation Form Details */}
+                    <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-xl border border-blue-100 dark:border-blue-900/50 space-y-3">
+                      <label className="text-xs font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider flex items-center gap-2">
+                        <FileText size={14} />
+                        Donation Form Details
+                      </label>
+
+                      {/* Payment Mode */}
+                      <div>
+                        <label className="text-[10px] uppercase text-slate-400 font-bold block mb-1">Payment Mode</label>
+                        <div className="flex flex-wrap gap-2">
+                          {(['cash', 'upi', 'card', 'cheque', 'online'] as const).map((mode) => (
+                            <button
+                              key={mode}
+                              type="button"
+                              onClick={() => setFormData({ ...formData, paymentMode: mode })}
+                              className={cn(
+                                "px-3 py-1.5 rounded-lg text-xs font-bold transition-all capitalize",
+                                formData.paymentMode === mode
+                                  ? "bg-blue-600 text-white"
+                                  : "bg-white dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-800"
+                              )}
+                            >
+                              {mode}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Receipt Number */}
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                          <CreditCard size={16} className="text-blue-400" />
+                        </div>
+                        <input
+                          value={formData.receiptNumber || ''}
+                          onChange={(e) => setFormData({ ...formData, receiptNumber: e.target.value })}
+                          className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-slate-800 border border-blue-200 dark:border-blue-800 rounded-lg text-sm"
+                          placeholder="Receipt Number"
+                        />
+                      </div>
+
+                      {/* Phone */}
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                          <Phone size={16} className="text-blue-400" />
+                        </div>
+                        <input
+                          value={formData.donorPhone || ''}
+                          onChange={(e) => setFormData({ ...formData, donorPhone: e.target.value })}
+                          className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-slate-800 border border-blue-200 dark:border-blue-800 rounded-lg text-sm"
+                          placeholder="Donor Phone"
+                        />
+                      </div>
+
+                      {/* Email */}
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                          <Mail size={16} className="text-blue-400" />
+                        </div>
+                        <input
+                          type="email"
+                          value={formData.donorEmail || ''}
+                          onChange={(e) => setFormData({ ...formData, donorEmail: e.target.value })}
+                          className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-slate-800 border border-blue-200 dark:border-blue-800 rounded-lg text-sm"
+                          placeholder="Donor Email"
+                        />
+                      </div>
+
+                      {/* Address */}
+                      <div className="relative">
+                        <div className="absolute top-2.5 left-0 pl-3 pointer-events-none">
+                          <MapPin size={16} className="text-blue-400" />
+                        </div>
+                        <textarea
+                          value={formData.donorAddress || ''}
+                          onChange={(e) => setFormData({ ...formData, donorAddress: e.target.value })}
+                          className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-slate-800 border border-blue-200 dark:border-blue-800 rounded-lg text-sm min-h-[60px]"
+                          placeholder="Donor Address"
+                        />
+                      </div>
+
+                      {/* PAN */}
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                          <CreditCard size={16} className="text-blue-400" />
+                        </div>
+                        <input
+                          value={formData.donorPAN || ''}
+                          onChange={(e) => setFormData({ ...formData, donorPAN: e.target.value.toUpperCase() })}
+                          className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-slate-800 border border-blue-200 dark:border-blue-800 rounded-lg text-sm uppercase"
+                          placeholder="PAN Number (for 80G)"
+                          maxLength={10}
+                        />
+                      </div>
                     </div>
                   </div>
                 )}
@@ -226,9 +421,14 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, isOpen, onClose, onSave }) 
                       <textarea
                         value={formData.note || ''}
                         onChange={(e) => setFormData({ ...formData, note: e.target.value })}
-                        className="w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all text-base min-h-[80px] text-slate-900 dark:text-slate-100"
-                        placeholder="Private notes..."
+                        className="w-full pl-10 pr-12 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all text-base min-h-[80px] text-slate-900 dark:text-slate-100"
+                        placeholder="Private notes... (or use voice input)"
                       />
+                      <div className="absolute top-2 right-2">
+                        <VoiceInputButton 
+                          onTranscript={(text) => setFormData({ ...formData, note: (formData.note || '') + text })}
+                        />
+                      </div>
                     </div>
                   </div>
                 </div>

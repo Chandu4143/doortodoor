@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
 import { 
   BarChart, 
   Bar, 
@@ -12,18 +13,29 @@ import {
   Cell,
   Legend
 } from 'recharts';
-import { Sparkles, Loader2, TrendingUp, Users, Wallet, ArrowRight, Building, Map, Target } from 'lucide-react';
+import { Sparkles, Loader2, TrendingUp, Users, Wallet, ArrowRight, Building, Map, Target, Plus, Rocket } from 'lucide-react';
 import { Apartment, Room } from '../types';
 import { generateFundraisingInsights } from '../services/geminiService';
 import { STATUS_CONFIG } from '../constants';
+import TodaysTasks from './TodaysTasks';
+import { DashboardSkeleton } from './ui/SkeletonLoader';
 
 interface DashboardProps {
   apartments: Apartment[];
+  onRoomClick?: (roomId: string, floor: string, apartmentId: string) => void;
+  onCreateCampaign?: () => void;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ apartments }) => {
+const Dashboard: React.FC<DashboardProps> = ({ apartments, onRoomClick, onCreateCampaign }) => {
   const [aiInsight, setAiInsight] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+  
+  // Simulate initial load for skeleton
+  useEffect(() => {
+    const timer = setTimeout(() => setIsInitialLoad(false), 500);
+    return () => clearTimeout(timer);
+  }, []);
 
   // --- Calculations ---
   let totalRooms = 0;
@@ -80,65 +92,195 @@ const Dashboard: React.FC<DashboardProps> = ({ apartments }) => {
     }
   };
 
+  // Show skeleton during initial load
+  if (isInitialLoad && apartments.length > 0) {
+    return <DashboardSkeleton />;
+  }
+
   if (apartments.length === 0) {
     return (
-      <div className="h-full flex flex-col items-center justify-center text-slate-400 p-8">
-        <div className="bg-slate-100 p-6 rounded-full mb-6 animate-bounce">
-            <TrendingUp size={48} className="opacity-50 text-slate-500" />
-        </div>
-        <h3 className="text-xl font-bold text-slate-700">No Data Yet</h3>
-        <p className="max-w-xs text-center mt-2 text-slate-500">Create your first apartment campaign to start seeing analytics here.</p>
+      <div className="h-full flex flex-col items-center justify-center p-8">
+        <motion.div
+          initial={{ scale: 0 }}
+          animate={{ scale: 1 }}
+          transition={{ type: 'spring', delay: 0.1 }}
+          className="relative mb-8"
+        >
+          <div className="w-24 h-24 bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-blue-900/30 dark:to-indigo-900/30 rounded-3xl flex items-center justify-center">
+            <Rocket size={48} className="text-blue-500" />
+          </div>
+          <motion.div
+            animate={{ y: [-5, 5, -5] }}
+            transition={{ duration: 2, repeat: Infinity }}
+            className="absolute -top-2 -right-2 w-8 h-8 bg-amber-400 rounded-full flex items-center justify-center text-white text-lg"
+          >
+            ✨
+          </motion.div>
+        </motion.div>
+        
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+          className="text-center max-w-sm"
+        >
+          <h3 className="text-2xl font-bold text-slate-800 dark:text-slate-100 mb-2">
+            Ready to Start?
+          </h3>
+          <p className="text-slate-500 dark:text-slate-400 mb-6 leading-relaxed">
+            Create your first apartment campaign and watch your fundraising progress come to life!
+          </p>
+          
+          {onCreateCampaign && (
+            <button
+              onClick={onCreateCampaign}
+              className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 shadow-lg shadow-blue-200 dark:shadow-blue-900/50 active:scale-95 transition-all"
+            >
+              <Plus size={20} />
+              Create Campaign
+            </button>
+          )}
+        </motion.div>
+        
+        {/* Feature hints */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.4 }}
+          className="mt-12 grid grid-cols-3 gap-6 max-w-md"
+        >
+          {[
+            { icon: '🏢', label: 'Track Buildings' },
+            { icon: '📊', label: 'View Analytics' },
+            { icon: '🎯', label: 'Set Goals' },
+          ].map((item, i) => (
+            <div key={i} className="text-center">
+              <div className="text-2xl mb-1">{item.icon}</div>
+              <p className="text-xs text-slate-400 font-medium">{item.label}</p>
+            </div>
+          ))}
+        </motion.div>
       </div>
     );
   }
 
   const overallProgress = totalTarget > 0 ? Math.min(100, Math.round((totalRaised / totalTarget) * 100)) : 0;
+  const conversionRate = visitedCount > 0 ? Math.round((donatedCount / visitedCount) * 100) : 0;
+  const avgDonation = donatedCount > 0 ? Math.round(totalRaised / donatedCount) : 0;
+
+  const coveragePercent = Math.round((visitedCount / Math.max(totalRooms, 1)) * 100);
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto animate-in fade-in duration-500 pb-10">
+    <div className="space-y-6 max-w-7xl mx-auto pb-10">
       
-      {/* Top Metric Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-5 hover:shadow-md transition-shadow">
-          <div className="w-14 h-14 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center shadow-inner">
-            <Users size={28} strokeWidth={2} />
-          </div>
-          <div>
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Coverage</p>
-            <div className="flex items-baseline gap-2">
-                <p className="text-3xl font-bold text-slate-800">{Math.round((visitedCount / Math.max(totalRooms, 1)) * 100)}%</p>
-                <span className="text-sm font-medium text-slate-500">visited</span>
+      {/* Top Metric Cards - Animated */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-5">
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="bg-white dark:bg-slate-800 p-5 md:p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 hover:shadow-md transition-shadow"
+        >
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 md:w-14 md:h-14 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-2xl flex items-center justify-center">
+              <Users size={24} strokeWidth={2} />
             </div>
-            <p className="text-xs text-slate-400 mt-1">{visitedCount} of {totalRooms} doors knocked</p>
+            <div className="flex-1">
+              <p className="text-[10px] md:text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Coverage</p>
+              <p className="text-2xl md:text-3xl font-bold text-slate-800 dark:text-slate-100">{coveragePercent}%</p>
+            </div>
           </div>
-        </div>
+          {/* Animated progress bar */}
+          <div className="mt-3 w-full h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+            <motion.div 
+              initial={{ width: 0 }}
+              animate={{ width: `${coveragePercent}%` }}
+              transition={{ delay: 0.3, duration: 0.8 }}
+              className="h-full bg-blue-500 rounded-full"
+            />
+          </div>
+          <p className="text-[10px] text-slate-400 mt-1.5">{visitedCount} of {totalRooms} doors</p>
+        </motion.div>
 
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
-          <div className="flex items-center gap-5 mb-3">
-             <div className="w-14 h-14 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center shadow-inner">
-               <Wallet size={28} strokeWidth={2} />
-             </div>
-             <div>
-               <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Total Raised</p>
-               <p className="text-3xl font-bold text-slate-800">₹{totalRaised.toLocaleString()}</p>
-             </div>
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.15 }}
+          className="bg-white dark:bg-slate-800 p-5 md:p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 hover:shadow-md transition-shadow"
+        >
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 md:w-14 md:h-14 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-2xl flex items-center justify-center">
+              <Wallet size={24} strokeWidth={2} />
+            </div>
+            <div className="flex-1">
+              <p className="text-[10px] md:text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Raised</p>
+              <p className="text-2xl md:text-3xl font-bold text-slate-800 dark:text-slate-100">₹{totalRaised.toLocaleString()}</p>
+            </div>
           </div>
           {totalTarget > 0 && (
-             <div className="mt-2">
-                <div className="flex justify-between text-[10px] font-bold uppercase text-slate-400 mb-1">
-                   <span>Goal: ₹{totalTarget.toLocaleString()}</span>
-                   <span className="text-emerald-600">{overallProgress}%</span>
-                </div>
-                <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
-                   <div 
-                     className="h-full bg-emerald-500 rounded-full transition-all duration-1000" 
-                     style={{width: `${overallProgress}%`}}
-                   />
-                </div>
-             </div>
+            <>
+              <div className="mt-3 w-full h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+                <motion.div 
+                  initial={{ width: 0 }}
+                  animate={{ width: `${overallProgress}%` }}
+                  transition={{ delay: 0.4, duration: 0.8 }}
+                  className="h-full bg-emerald-500 rounded-full"
+                />
+              </div>
+              <p className="text-[10px] text-slate-400 mt-1.5">{overallProgress}% of ₹{totalTarget.toLocaleString()}</p>
+            </>
           )}
-        </div>
+        </motion.div>
 
+        {/* Conversion Rate Card */}
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+          className="bg-white dark:bg-slate-800 p-5 md:p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 hover:shadow-md transition-shadow"
+        >
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 md:w-14 md:h-14 bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 rounded-2xl flex items-center justify-center">
+              <Target size={24} strokeWidth={2} />
+            </div>
+            <div className="flex-1">
+              <p className="text-[10px] md:text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Conversion</p>
+              <p className="text-2xl md:text-3xl font-bold text-slate-800 dark:text-slate-100">{conversionRate}%</p>
+            </div>
+          </div>
+          <div className="mt-3 w-full h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+            <motion.div 
+              initial={{ width: 0 }}
+              animate={{ width: `${conversionRate}%` }}
+              transition={{ delay: 0.5, duration: 0.8 }}
+              className="h-full bg-purple-500 rounded-full"
+            />
+          </div>
+          <p className="text-[10px] text-slate-400 mt-1.5">{donatedCount} of {visitedCount} donated</p>
+        </motion.div>
+
+        {/* Average Donation Card */}
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.25 }}
+          className="bg-white dark:bg-slate-800 p-5 md:p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 hover:shadow-md transition-shadow"
+        >
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 md:w-14 md:h-14 bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 rounded-2xl flex items-center justify-center">
+              <TrendingUp size={24} strokeWidth={2} />
+            </div>
+            <div className="flex-1">
+              <p className="text-[10px] md:text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Avg. Donation</p>
+              <p className="text-2xl md:text-3xl font-bold text-slate-800 dark:text-slate-100">₹{avgDonation.toLocaleString()}</p>
+            </div>
+          </div>
+          <p className="text-[10px] text-slate-400 mt-3">per donor</p>
+        </motion.div>
+      </div>
+
+      {/* AI Action Card - Full Width */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         {/* AI Action Card */}
         <div className="group bg-gradient-to-br from-indigo-600 to-violet-700 p-6 rounded-2xl shadow-lg shadow-indigo-200 text-white flex flex-col justify-between relative overflow-hidden">
           <div className="relative z-10">
@@ -164,6 +306,11 @@ const Dashboard: React.FC<DashboardProps> = ({ apartments }) => {
           <div className="absolute bottom-0 left-0 w-24 h-24 bg-purple-500/30 rounded-full blur-2xl translate-y-1/2 -translate-x-1/2"></div>
         </div>
       </div>
+
+      {/* Today's Tasks - Pending Callbacks */}
+      {onRoomClick && (
+        <TodaysTasks apartments={apartments} onRoomClick={onRoomClick} />
+      )}
 
       {/* AI Insight Result */}
       {aiInsight && (
@@ -267,7 +414,7 @@ const Dashboard: React.FC<DashboardProps> = ({ apartments }) => {
                // Calculate local stats
                let aptVisited = 0;
                let aptTotal = 0;
-               Object.values(apt.rooms).flat().forEach(r => {
+               (Object.values(apt.rooms).flat() as Room[]).forEach(r => {
                  aptTotal++;
                  if (r.status !== 'unvisited') aptVisited++;
                });

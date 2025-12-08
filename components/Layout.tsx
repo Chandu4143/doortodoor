@@ -1,5 +1,5 @@
-import React, { useEffect } from 'react';
-import { Moon, Sun, WifiOff } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Moon, Sun, WifiOff, Wifi, Cloud, CloudOff } from 'lucide-react';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { cn } from '../utils/cn';
 
@@ -12,7 +12,31 @@ interface LayoutProps {
 
 export default function Layout({ children, sidebar, isSidebarOpen, onSidebarClose }: LayoutProps) {
     const [isDarkMode, setIsDarkMode] = useLocalStorage('darkMode', false);
-    const [isOnline, setIsOnline] = React.useState(navigator.onLine);
+    const [isOnline, setIsOnline] = useState(navigator.onLine);
+    const [showSyncStatus, setShowSyncStatus] = useState(false);
+    const [lastSaved, setLastSaved] = useState<Date | null>(null);
+
+    // Track storage changes for sync indicator - longer visibility
+    useEffect(() => {
+        const handleStorage = () => {
+            setLastSaved(new Date());
+            setShowSyncStatus(true);
+            setTimeout(() => setShowSyncStatus(false), 3000); // Increased from 2s to 3s
+        };
+        
+        // Listen for localStorage changes
+        const originalSetItem = localStorage.setItem;
+        localStorage.setItem = function(key, value) {
+            originalSetItem.apply(this, [key, value]);
+            if (key.startsWith('doorstep')) {
+                handleStorage();
+            }
+        };
+
+        return () => {
+            localStorage.setItem = originalSetItem;
+        };
+    }, []);
 
     useEffect(() => {
         const handleOnline = () => setIsOnline(true);
@@ -40,9 +64,17 @@ export default function Layout({ children, sidebar, isSidebarOpen, onSidebarClos
         )}>
             {/* Offline Banner */}
             {!isOnline && (
-                <div className="fixed top-0 left-0 right-0 z-[60] bg-amber-500 text-white text-xs font-bold text-center py-1 px-4 shadow-md flex items-center justify-center gap-2">
-                    <WifiOff size={14} />
+                <div className="fixed top-0 left-0 right-0 z-[60] bg-amber-500 text-white text-xs font-bold text-center py-1.5 px-4 shadow-md flex items-center justify-center gap-2">
+                    <CloudOff size={14} />
                     You are offline. Changes saved locally.
+                </div>
+            )}
+
+            {/* Sync Status Indicator - Improved visibility */}
+            {showSyncStatus && isOnline && (
+                <div className="fixed top-4 right-4 z-[60] bg-green-500 text-white text-xs font-bold py-2 px-4 rounded-full shadow-lg shadow-green-200 dark:shadow-green-900/50 flex items-center gap-2 animate-in slide-in-from-top-2 duration-300">
+                    <Cloud size={14} />
+                    Saved
                 </div>
             )}
 

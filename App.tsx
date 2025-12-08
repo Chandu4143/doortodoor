@@ -1,13 +1,30 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, lazy, Suspense } from 'react';
 
-// Components
+// Core Components (always loaded)
 import Layout from './components/Layout';
 import Sidebar from './components/Sidebar';
-import ApartmentView from './components/ApartmentView';
-import Dashboard from './components/Dashboard';
 import MobileHeader from './components/MobileHeader';
-import RoomModal from './components/RoomModal';
 import Modal from './components/ui/Modal';
+import HomeScreen from './components/HomeScreen';
+import Confetti from './components/ui/Confetti';
+import SwipeTutorial, { useSwipeTutorial } from './components/ui/SwipeTutorial';
+
+// Lazy loaded components
+const ApartmentView = lazy(() => import('./components/ApartmentView'));
+const Dashboard = lazy(() => import('./components/Dashboard'));
+const RoomModal = lazy(() => import('./components/RoomModal'));
+const CorporateApp = lazy(() => import('./components/corporate/CorporateApp'));
+const OnboardingTutorial = lazy(() => import('./components/OnboardingTutorial'));
+const GoalTracker = lazy(() => import('./components/GoalTracker'));
+const TeamPanel = lazy(() => import('./components/TeamPanel'));
+const AccessibilityPanel = lazy(() => import('./components/AccessibilityPanel'));
+
+// Loading fallback
+const LoadingFallback = () => (
+  <div className="h-full flex items-center justify-center">
+    <div className="w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin" />
+  </div>
+);
 
 // Services & Types
 import {
@@ -19,14 +36,29 @@ import {
   exportToCSV,
   validateAndParseImport
 } from './services/storageService';
-import { Apartment, Room } from './types';
+import { loadCampaigns } from './services/corporateStorageService';
+import { initAccessibility } from './services/accessibilityService';
+import { Apartment, Room, AppMode } from './types';
+
+const ONBOARDING_KEY = 'doorstep_onboarding_complete';
 
 function App() {
-  // --- State ---
+  // --- App Mode State ---
+  const [appMode, setAppMode] = useState<AppMode>('home');
+  const [showOnboarding, setShowOnboarding] = useState(() => {
+    return !localStorage.getItem(ONBOARDING_KEY);
+  });
+
+  // --- Residential State ---
   const [apartments, setApartments] = useState<Apartment[]>([]);
   const [selectedApartmentId, setSelectedApartmentId] = useState<string | null>(null);
   const [selectedFloor, setSelectedFloor] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<'dashboard' | 'apartment'>('dashboard');
+  const [viewMode, setViewMode] = useState<'dashboard' | 'apartment' | 'goals' | 'team' | 'accessibility'>('dashboard');
+
+  const handleOnboardingComplete = () => {
+    localStorage.setItem(ONBOARDING_KEY, 'true');
+    setShowOnboarding(false);
+  };
 
   // Search & Filter State
   const [searchQuery, setSearchQuery] = useState('');
@@ -37,14 +69,45 @@ function App() {
   const [showDataModal, setShowDataModal] = useState(false);
   const [editingRoom, setEditingRoom] = useState<{ roomId: string, floor: string, apartmentId: string } | null>(null);
   const [editingApartment, setEditingApartment] = useState<Apartment | null>(null);
+  
+  // Celebration state
+  const [showConfetti, setShowConfetti] = useState(false);
+  
+  // Swipe tutorial for mobile
+  const { showTutorial: showSwipeTutorial, dismissTutorial } = useSwipeTutorial();
 
   // --- Effects ---
   useEffect(() => {
     setApartments(loadApartments());
+    initAccessibility(); // Initialize accessibility settings
     if (window.innerWidth >= 768) {
       setIsSidebarOpen(true);
     }
   }, []);
+
+  // Calculate stats for home screen
+  const residentialStats = useMemo(() => {
+    let totalRaised = 0;
+    apartments.forEach(apt => {
+      Object.values(apt.rooms).forEach((floor: Room[]) => {
+        floor.forEach(room => {
+          if (room.status === 'donated') totalRaised += (room.amountDonated || 0);
+        });
+      });
+    });
+    return { campaigns: apartments.length, totalRaised };
+  }, [apartments]);
+
+  const corporateStats = useMemo(() => {
+    const campaigns = loadCampaigns();
+    let totalRaised = 0;
+    campaigns.forEach(c => {
+      c.businesses.forEach(b => {
+        if (b.status === 'donated') totalRaised += (b.amountDonated || 0);
+      });
+    });
+    return { campaigns: campaigns.length, totalRaised };
+  }, [appMode]); // Recalculate when switching modes
 
   useEffect(() => {
     if (apartments.length > 0) {
@@ -79,6 +142,11 @@ function App() {
 
   const handleUpdateRoom = (roomId: string, updates: Partial<Room>) => {
     if (!editingRoom) return;
+    
+    // Check if this is a new donation to trigger confetti
+    const currentRoom = activeApartment?.rooms[editingRoom.floor]?.find(r => r.id === roomId);
+    const isNewDonation = updates.status === 'donated' && currentRoom?.status !== 'donated';
+    
     const updatedApts = updateRoomInApartment(
       apartments,
       editingRoom.apartmentId,
@@ -87,7 +155,20 @@ function App() {
       updates
     );
     setApartments(updatedApts);
+    
+    // Trigger confetti for donations!
+    if (isNewDonation) {
+      setShowConfetti(true);
+      setTimeout(() => setShowConfetti(false), 100);
+    }
   };
+  
+  // Quick resume from home screen
+  const handleQuickResume = useCallback((apartmentId: string) => {
+    setSelectedApartmentId(apartmentId);
+    setAppMode('residential');
+    setViewMode('apartment');
+  }, []);
 
   const handleImportData = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -118,7 +199,49 @@ function App() {
   }, [activeApartment, editingRoom]);
 
   // --- Render ---
+
+  // Onboarding Tutorial (first time users)
+  if (showOnboarding) {
+    return (
+      <Suspense fallback={<LoadingFallback />}>
+        <OnboardingTutorial onComplete={handleOnboardingComplete} />
+      </Suspense>
+    );
+  }
+  
+  // Home Screen
+  if (appMode === 'home') {
+    return (
+      <HomeScreen
+        onSelectMode={setAppMode}
+        residentialStats={residentialStats}
+        corporateStats={corporateStats}
+        apartments={apartments}
+        onQuickResume={handleQuickResume}
+      />
+    );
+  }
+
+  // Corporate Mode
+  if (appMode === 'corporate') {
+    return (
+      <Suspense fallback={<LoadingFallback />}>
+        <CorporateApp onGoHome={() => setAppMode('home')} />
+      </Suspense>
+    );
+  }
+
+  // Residential Mode (existing code)
   return (
+    <>
+    {/* Confetti celebration */}
+    <Confetti isActive={showConfetti} />
+    
+    {/* Swipe tutorial for mobile */}
+    {showSwipeTutorial && window.innerWidth < 640 && (
+      <SwipeTutorial onDismiss={dismissTutorial} />
+    )}
+    
     <Layout
       isSidebarOpen={isSidebarOpen}
       onSidebarClose={() => setIsSidebarOpen(false)}
@@ -126,6 +249,7 @@ function App() {
         <Sidebar
           isOpen={isSidebarOpen}
           onClose={() => setIsSidebarOpen(false)}
+          onGoHome={() => setAppMode('home')}
           viewMode={viewMode}
           setViewMode={setViewMode}
           selectedApartmentId={selectedApartmentId}
@@ -145,7 +269,13 @@ function App() {
       }
     >
       <MobileHeader
-        title={viewMode === 'dashboard' ? 'Dashboard' : activeApartment?.name || 'DoorStep'}
+        title={
+          viewMode === 'dashboard' ? 'Dashboard' : 
+          viewMode === 'goals' ? 'Goals & Streaks' :
+          viewMode === 'team' ? 'Team & Share' :
+          viewMode === 'accessibility' ? 'Accessibility' :
+          activeApartment?.name || 'DoorStep'
+        }
         subtitle={activeApartment && viewMode === 'apartment' ? `${activeApartment.floors} Floors • ${activeApartment.unitsPerFloor} Units` : undefined}
         onMenuClick={() => setIsSidebarOpen(true)}
         onSettingsClick={activeApartment && viewMode === 'apartment' ? () => setEditingApartment(activeApartment) : undefined}
@@ -165,10 +295,64 @@ function App() {
             <p className="text-slate-500 dark:text-slate-400 mt-1">Real-time insights across your fundraising locations.</p>
           </div>
           <div className="p-4 md:p-8">
-            <Dashboard apartments={apartments} />
+            <Suspense fallback={<LoadingFallback />}>
+              <Dashboard 
+                apartments={apartments} 
+                onRoomClick={(roomId, floor, apartmentId) => {
+                  setSelectedApartmentId(apartmentId);
+                  setViewMode('apartment');
+                  setEditingRoom({ roomId, floor, apartmentId });
+                }}
+                onCreateCampaign={() => setIsSidebarOpen(true)}
+              />
+            </Suspense>
+          </div>
+        </div>
+      ) : viewMode === 'goals' ? (
+        <div className="h-full overflow-y-auto">
+          <div className="hidden md:block px-8 py-6 bg-white dark:bg-slate-900 border-b border-slate-200/60 dark:border-slate-800 sticky top-0 z-10">
+            <h1 className="text-3xl font-bold text-slate-800 dark:text-slate-100 tracking-tight">Goals & Achievements</h1>
+            <p className="text-slate-500 dark:text-slate-400 mt-1">Track your daily targets, streaks, and unlock badges.</p>
+          </div>
+          <div className="p-4 md:p-8 max-w-2xl mx-auto">
+            <Suspense fallback={<LoadingFallback />}>
+              <GoalTracker apartments={apartments} />
+            </Suspense>
+          </div>
+        </div>
+      ) : viewMode === 'team' ? (
+        <div className="h-full overflow-y-auto">
+          <div className="hidden md:block px-8 py-6 bg-white dark:bg-slate-900 border-b border-slate-200/60 dark:border-slate-800 sticky top-0 z-10">
+            <h1 className="text-3xl font-bold text-slate-800 dark:text-slate-100 tracking-tight">Team Collaboration</h1>
+            <p className="text-slate-500 dark:text-slate-400 mt-1">Manage volunteers and share campaign data.</p>
+          </div>
+          <div className="p-4 md:p-8 max-w-2xl mx-auto">
+            <Suspense fallback={<LoadingFallback />}>
+              <TeamPanel 
+                apartments={apartments} 
+                onImportData={(imported) => {
+                  if (confirm('This will add imported campaigns to your existing data. Continue?')) {
+                    setApartments(prev => [...prev, ...imported]);
+                  }
+                }}
+              />
+            </Suspense>
+          </div>
+        </div>
+      ) : viewMode === 'accessibility' ? (
+        <div className="h-full overflow-y-auto">
+          <div className="hidden md:block px-8 py-6 bg-white dark:bg-slate-900 border-b border-slate-200/60 dark:border-slate-800 sticky top-0 z-10">
+            <h1 className="text-3xl font-bold text-slate-800 dark:text-slate-100 tracking-tight">Accessibility Settings</h1>
+            <p className="text-slate-500 dark:text-slate-400 mt-1">Customize the app for better usability.</p>
+          </div>
+          <div className="p-4 md:p-8 max-w-2xl mx-auto">
+            <Suspense fallback={<LoadingFallback />}>
+              <AccessibilityPanel />
+            </Suspense>
           </div>
         </div>
       ) : activeApartment ? (
+        <Suspense fallback={<LoadingFallback />}>
         <ApartmentView
           apartment={activeApartment}
           searchQuery={searchQuery}
@@ -179,7 +363,16 @@ function App() {
           setSelectedFloor={setSelectedFloor}
           onEditApartment={() => setEditingApartment(activeApartment)}
           onRoomClick={(roomId, floor, apartmentId) => setEditingRoom({ roomId, floor, apartmentId })}
+          onQuickStatusChange={(roomId, floor, status) => {
+            const updatedApts = updateRoomInApartment(apartments, activeApartment.id, floor, roomId, { status });
+            setApartments(updatedApts);
+          }}
+          onDonation={() => {
+            setShowConfetti(true);
+            setTimeout(() => setShowConfetti(false), 100);
+          }}
         />
+        </Suspense>
       ) : (
         <div className="h-full flex items-center justify-center p-8 bg-slate-50/50 dark:bg-slate-950/50">
           <div className="text-center max-w-sm">
@@ -203,12 +396,14 @@ function App() {
 
       {/* Room Modal */}
       {editingRoom && activeRoom && (
-        <RoomModal
-          room={activeRoom}
-          isOpen={!!editingRoom}
-          onClose={() => setEditingRoom(null)}
-          onSave={handleUpdateRoom}
-        />
+        <Suspense fallback={null}>
+          <RoomModal
+            room={activeRoom}
+            isOpen={!!editingRoom}
+            onClose={() => setEditingRoom(null)}
+            onSave={handleUpdateRoom}
+          />
+        </Suspense>
       )}
 
       {/* Restore Data Modal */}
@@ -295,6 +490,7 @@ function App() {
       )}
 
     </Layout>
+    </>
   );
 }
 

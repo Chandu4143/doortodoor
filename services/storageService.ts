@@ -152,7 +152,7 @@ export const resizeApartment = (
 
 export const exportToCSV = (apartments: Apartment[]) => {
   const rows = [
-    ["Apartment", "Floor", "Room", "Status", "Visitor Name", "Remark", "Notes", "Last Updated", "Donation Amount"]
+    ["Apartment", "Floor", "Room", "Status", "Visitor Name", "Phone", "Email", "Address", "PAN", "Remark", "Notes", "Last Updated", "Donation Amount", "Supports", "Payment Mode", "Receipt #"]
   ];
 
   apartments.forEach(apt => {
@@ -164,10 +164,17 @@ export const exportToCSV = (apartments: Apartment[]) => {
           room.roomNumber.toString(),
           room.status,
           room.visitorName || "",
+          room.donorPhone || "",
+          room.donorEmail || "",
+          room.donorAddress || "",
+          room.donorPAN || "",
           room.remark || "",
           room.note || "",
           room.updatedAt ? new Date(room.updatedAt).toISOString() : "",
-          room.amountDonated ? room.amountDonated.toString() : "0"
+          room.amountDonated ? room.amountDonated.toString() : "0",
+          room.supportsCount ? room.supportsCount.toString() : "0",
+          room.paymentMode || "",
+          room.receiptNumber || ""
         ]);
       });
     });

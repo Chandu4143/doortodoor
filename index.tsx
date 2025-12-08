@@ -2,7 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import './index.css';
-import * as serviceWorkerRegistration from './serviceWorkerRegistration';
+import { registerSW } from 'virtual:pwa-register';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
@@ -16,7 +16,14 @@ root.render(
   </React.StrictMode>
 );
 
-// If you want your app to work offline and load faster, you can change
-// unregister() to register() below. Note this comes with some pitfalls.
-// Learn more about service workers: https://cra.link/PWA
-serviceWorkerRegistration.register();
+// Register PWA service worker
+const updateSW = registerSW({
+  onNeedRefresh() {
+    if (confirm('New content available. Reload?')) {
+      updateSW(true);
+    }
+  },
+  onOfflineReady() {
+    console.log('App ready to work offline');
+  },
+});

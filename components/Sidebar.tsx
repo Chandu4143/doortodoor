@@ -7,16 +7,22 @@ import {
     Building2,
     Trash2,
     Download,
-    ChevronLeft
+    ChevronLeft,
+    FileText,
+    Target,
+    Users,
+    Accessibility
 } from 'lucide-react';
 import { Apartment } from '../types';
 import { cn } from '../utils/cn';
+import { generatePDFReport } from '../services/pdfService';
 
 interface SidebarProps {
     isOpen: boolean;
     onClose: () => void;
-    viewMode: 'dashboard' | 'apartment';
-    setViewMode: (mode: 'dashboard' | 'apartment') => void;
+    onGoHome: () => void;
+    viewMode: 'dashboard' | 'apartment' | 'goals' | 'team' | 'accessibility';
+    setViewMode: (mode: 'dashboard' | 'apartment' | 'goals' | 'team' | 'accessibility') => void;
     selectedApartmentId: string | null;
     onSelectApartment: (id: string | null) => void;
     apartments: Apartment[];
@@ -29,6 +35,7 @@ interface SidebarProps {
 export default function Sidebar({
     isOpen,
     onClose,
+    onGoHome,
     viewMode,
     setViewMode,
     selectedApartmentId,
@@ -78,6 +85,13 @@ export default function Sidebar({
                 {/* Main Nav */}
                 <div className="space-y-1">
                     <button
+                        onClick={onGoHome}
+                        className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-200 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-200"
+                    >
+                        <Home size={20} className="text-slate-400" />
+                        Back to Home
+                    </button>
+                    <button
                         onClick={() => { setViewMode('dashboard'); onSelectApartment(null); }}
                         className={cn(
                             "w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-200",
@@ -88,6 +102,42 @@ export default function Sidebar({
                     >
                         <LayoutGrid size={20} className={viewMode === 'dashboard' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'} />
                         Dashboard
+                    </button>
+                    <button
+                        onClick={() => { setViewMode('goals'); onSelectApartment(null); }}
+                        className={cn(
+                            "w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-200",
+                            viewMode === 'goals'
+                                ? "bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 shadow-sm"
+                                : "text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-200"
+                        )}
+                    >
+                        <Target size={20} className={viewMode === 'goals' ? 'text-amber-600 dark:text-amber-400' : 'text-slate-400'} />
+                        Goals & Streaks
+                    </button>
+                    <button
+                        onClick={() => { setViewMode('team'); onSelectApartment(null); }}
+                        className={cn(
+                            "w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-200",
+                            viewMode === 'team'
+                                ? "bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-400 shadow-sm"
+                                : "text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-200"
+                        )}
+                    >
+                        <Users size={20} className={viewMode === 'team' ? 'text-purple-600 dark:text-purple-400' : 'text-slate-400'} />
+                        Team & Share
+                    </button>
+                    <button
+                        onClick={() => { setViewMode('accessibility'); onSelectApartment(null); }}
+                        className={cn(
+                            "w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-200",
+                            viewMode === 'accessibility'
+                                ? "bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-400 shadow-sm"
+                                : "text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-200"
+                        )}
+                    >
+                        <Accessibility size={20} className={viewMode === 'accessibility' ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400'} />
+                        Accessibility
                     </button>
                     <button
                         onClick={onOpenRestoration}
@@ -204,7 +254,36 @@ export default function Sidebar({
                 </div>
             </div>
 
-            <div className="p-4 border-t border-slate-100 dark:border-slate-800 shrink-0 bg-slate-50/50 dark:bg-slate-900/50">
+            <div className="p-4 border-t border-slate-100 dark:border-slate-800 shrink-0 bg-slate-50/50 dark:bg-slate-900/50 space-y-2">
+                {/* PDF Export Dropdown */}
+                <div className="relative group">
+                    <button
+                        className="w-full flex items-center justify-center gap-2 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider border border-slate-200 dark:border-slate-700 rounded-xl py-3 hover:bg-white dark:hover:bg-slate-800 hover:border-red-200 dark:hover:border-red-800 hover:text-red-600 dark:hover:text-red-400 hover:shadow-sm transition-all"
+                    >
+                        <FileText size={16} />
+                        Export PDF
+                    </button>
+                    <div className="absolute bottom-full left-0 right-0 mb-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
+                        <button
+                            onClick={() => generatePDFReport(apartments, 'summary')}
+                            className="w-full px-4 py-2.5 text-left text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-t-xl"
+                        >
+                            Summary Report
+                        </button>
+                        <button
+                            onClick={() => generatePDFReport(apartments, 'detailed')}
+                            className="w-full px-4 py-2.5 text-left text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700"
+                        >
+                            Detailed Report
+                        </button>
+                        <button
+                            onClick={() => generatePDFReport(apartments, 'forms')}
+                            className="w-full px-4 py-2.5 text-left text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-b-xl"
+                        >
+                            Donation Forms
+                        </button>
+                    </div>
+                </div>
                 <button
                     onClick={onExportCSV}
                     className="group w-full flex items-center justify-center gap-2 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider border border-slate-200 dark:border-slate-700 rounded-xl py-3 hover:bg-white dark:hover:bg-slate-800 hover:border-blue-200 dark:hover:border-blue-800 hover:text-blue-600 dark:hover:text-blue-400 hover:shadow-sm transition-all"
