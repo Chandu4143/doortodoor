@@ -25,7 +25,7 @@ export default defineConfig(({ mode }) => {
             start_url: '/',
             icons: [
               {
-                src: 'icon.svg',
+                src: '/icon.svg',
                 sizes: 'any',
                 type: 'image/svg+xml',
                 purpose: 'any maskable'
@@ -59,48 +59,20 @@ export default defineConfig(({ mode }) => {
         }
       },
       build: {
-        chunkSizeWarningLimit: 300,
+        chunkSizeWarningLimit: 500,
         rollupOptions: {
           output: {
-            manualChunks: (id) => {
-              // Vendor chunks - more granular splitting
-              if (id.includes('node_modules')) {
-                if (id.includes('react') || id.includes('react-dom') || id.includes('scheduler')) {
-                  return 'vendor-react';
-                }
-                if (id.includes('recharts')) {
-                  return 'vendor-recharts';
-                }
-                if (id.includes('d3-')) {
-                  return 'vendor-d3';
-                }
-                if (id.includes('framer-motion')) {
-                  return 'vendor-motion';
-                }
-                if (id.includes('lucide-react')) {
-                  return 'vendor-icons';
-                }
-                if (id.includes('clsx') || id.includes('tailwind-merge')) {
-                  return 'vendor-utils';
-                }
-                if (id.includes('@google/genai')) {
-                  return 'vendor-ai';
-                }
-                // Remaining node_modules
-                return 'vendor-misc';
-              }
-              // Corporate module
-              if (id.includes('/corporate/')) {
-                return 'corporate';
-              }
-              // Dashboard & analytics
-              if (id.includes('Dashboard') || id.includes('GoalTracker') || id.includes('TodaysTasks')) {
-                return 'dashboard';
-              }
-              // Services
-              if (id.includes('/services/')) {
-                return 'services';
-              }
+            manualChunks: {
+              // Core React bundle (must include lucide-react to avoid initialization issues)
+              'vendor-react': ['react', 'react-dom', 'scheduler', 'lucide-react'],
+              // Charts - lazy loaded
+              'vendor-charts': ['recharts', 'd3-shape', 'd3-scale', 'd3-path', 'd3-array', 'd3-interpolate', 'd3-color', 'd3-format', 'd3-time', 'd3-time-format'],
+              // Animation library
+              'vendor-motion': ['framer-motion'],
+              // AI SDK - lazy loaded
+              'vendor-ai': ['@google/genai'],
+              // Utilities
+              'vendor-utils': ['clsx', 'tailwind-merge'],
             }
           }
         }
