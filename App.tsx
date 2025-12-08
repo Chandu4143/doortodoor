@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, lazy, Suspense } from 'react';
+import { Analytics } from '@vercel/analytics/react';
 
 // Core Components (always loaded)
 import Layout from './components/Layout';
@@ -490,6 +491,9 @@ function App() {
       )}
 
     </Layout>
+    
+    {/* Vercel Analytics */}
+    <Analytics />
     </>
   );
 }
