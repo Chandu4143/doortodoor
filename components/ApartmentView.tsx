@@ -289,12 +289,13 @@ export default function ApartmentView({
                                         // Mobile: Use swipeable card
                                         if (onQuickStatusChange && typeof window !== 'undefined' && window.innerWidth < 640) {
                                             return (
-                                                <SwipeableRoomCard
-                                                    key={room.id}
-                                                    room={room}
-                                                    onStatusChange={(newStatus) => handleQuickStatusChange(room.id, floor, newStatus)}
-                                                    onClick={() => onRoomClick(room.id, floor, apartment.id)}
-                                                />
+                                                <React.Fragment key={room.id}>
+                                                    <SwipeableRoomCard
+                                                        room={room}
+                                                        onStatusChange={(newStatus) => handleQuickStatusChange(room.id, floor, newStatus)}
+                                                        onClick={() => onRoomClick(room.id, floor, apartment.id)}
+                                                    />
+                                                </React.Fragment>
                                             );
                                         }
 

@@ -10,6 +10,11 @@ export default defineConfig(({ mode }) => {
         port: 3000,
         host: '0.0.0.0',
       },
+      test: {
+        globals: true,
+        environment: 'node',
+        include: ['tests/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
+      },
       plugins: [
         react(),
         VitePWA({
