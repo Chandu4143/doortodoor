@@ -1,3 +1,9 @@
+/**
+ * CorporateSidebar Component
+ * Main navigation sidebar for corporate/business campaigns
+ * Requirements: 8.3
+ */
+
 import React, { useState } from 'react';
 import {
   Home,
@@ -12,11 +18,17 @@ import {
   FileText,
   Target,
   Users,
-  Accessibility
+  Accessibility,
+  Wifi,
+  WifiOff,
+  LogOut,
+  User
 } from 'lucide-react';
 import { BusinessCampaign } from '../../types';
 import { cn } from '../../utils/cn';
 import { generateCorporatePDFReport } from '../../services/pdfService';
+import { useAuth } from '../../contexts/AuthContext';
+import type { ConnectionState } from '../../services/supabase/realtimeService';
 
 interface CorporateSidebarProps {
   isOpen: boolean;
@@ -31,6 +43,7 @@ interface CorporateSidebarProps {
   onDeleteCampaign: (id: string) => void;
   onExportCSV: () => void;
   onOpenRestoration: () => void;
+  connectionState?: ConnectionState;
 }
 
 export default function CorporateSidebar({
@@ -45,8 +58,10 @@ export default function CorporateSidebar({
   onCreateCampaign,
   onDeleteCampaign,
   onExportCSV,
-  onOpenRestoration
+  onOpenRestoration,
+  connectionState = 'disconnected'
 }: CorporateSidebarProps) {
+  const { profile, currentTeam, signOut } = useAuth();
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [newName, setNewName] = useState('');
   const [newArea, setNewArea] = useState('');
@@ -59,6 +74,22 @@ export default function CorporateSidebar({
     setNewArea('');
     setNewTarget(0);
     setShowCreateForm(false);
+  };
+
+  // Connection status indicator
+  const ConnectionIndicator = () => {
+    const isConnected = connectionState === 'connected';
+    return (
+      <div className={cn(
+        "flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded-full",
+        isConnected 
+          ? "text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20" 
+          : "text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800"
+      )}>
+        {isConnected ? <Wifi size={12} /> : <WifiOff size={12} />}
+        {isConnected ? 'Synced' : 'Offline'}
+      </div>
+    );
   };
 
   return (
@@ -76,10 +107,39 @@ export default function CorporateSidebar({
           </div>
           Corporate
         </div>
-        <button onClick={onClose} className="md:hidden text-slate-400 p-2 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg">
-          <ChevronLeft />
-        </button>
+        <div className="flex items-center gap-2">
+          <ConnectionIndicator />
+          <button onClick={onClose} className="md:hidden text-slate-400 p-2 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg">
+            <ChevronLeft />
+          </button>
+        </div>
       </div>
+      
+      {/* User & Team Info */}
+      {profile && (
+        <div className="px-4 pb-4 border-b border-slate-100 dark:border-slate-800">
+          <div className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
+            <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center">
+              <User size={18} className="text-blue-600 dark:text-blue-400" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-slate-800 dark:text-slate-200 truncate">
+                {profile.name}
+              </p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                {currentTeam?.name || 'No team'}
+              </p>
+            </div>
+            <button
+              onClick={signOut}
+              className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+              title="Sign out"
+            >
+              <LogOut size={16} />
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="px-4 py-2 flex-1 overflow-y-auto space-y-6 custom-scrollbar">
 

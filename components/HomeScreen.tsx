@@ -72,7 +72,7 @@ export default function HomeScreen({
   const totalCampaigns = residentialStats.campaigns + corporateStats.campaigns;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 flex flex-col">
+    <div className="min-h-screen overflow-y-auto bg-gradient-to-br from-slate-50 via-white to-blue-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 flex flex-col">
       
       {/* Header */}
       <motion.div 

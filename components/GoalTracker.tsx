@@ -1,114 +1,208 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
-  Target, Trophy, Flame, Settings, X, Save, 
-  FileText, Heart, Users, TrendingUp, Award,
-  ChevronRight, Calendar, Zap
+  Target, Trophy, Flame, Settings, Save, 
+  FileText, Heart, Users, Award,
+  Calendar, Zap, Loader2
 } from 'lucide-react';
-import { GoalSettings, GoalProgress, SUPPORT_VALUE, Apartment, Room } from '../types';
+import { GoalSettings, GoalTargets, SUPPORT_VALUE, Achievement } from '../types';
 import { 
-  loadGoalSettings, saveGoalSettings, loadProgressHistory, 
-  getTodayProgress, getWeekProgress, ACHIEVEMENTS, getTodayKey
-} from '../services/goalService';
+  getGoalSettings, 
+  updateGoalSettings,
+  getTodayProgress,
+  getWeekProgress,
+  getTotalStats,
+  toGoalTargets,
+  toStreakData,
+  updateStreak,
+  type SupabaseGoalSettings,
+  type DailyProgress
+} from '../services/supabase/goalsService';
+import {
+  getAchievements,
+  checkAchievements,
+  getAchievementProgress
+} from '../services/supabase/achievementsService';
+import { ACHIEVEMENTS as ACHIEVEMENT_DEFINITIONS } from '../constants/achievements';
+import { useAuth } from '../contexts/AuthContext';
 import { cn } from '../utils/cn';
 import Modal from './ui/Modal';
 
-interface GoalTrackerProps {
-  apartments: Apartment[];
-}
-
-export default function GoalTracker({ apartments }: GoalTrackerProps) {
-  const [settings, setSettings] = useState<GoalSettings>(loadGoalSettings());
+export default function GoalTracker() {
+  const { user } = useAuth();
+  const [settings, setSettings] = useState<GoalSettings | null>(null);
+  const [todayProgress, setTodayProgress] = useState<DailyProgress | null>(null);
+  const [weekProgress, setWeekProgress] = useState<DailyProgress | null>(null);
+  const [totalStats, setTotalStats] = useState<{ presentations: number; forms: number; supports: number; amount: number } | null>(null);
+  const [achievements, setAchievements] = useState<Achievement[]>([]);
   const [showSettings, setShowSettings] = useState(false);
   const [showAchievements, setShowAchievements] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [newlyUnlocked, setNewlyUnlocked] = useState<Achievement[]>([]);
 
-  // Calculate actual progress from apartments data
-  const actualProgress = useMemo(() => {
-    const today = getTodayKey();
-    const todayStart = new Date(today).getTime();
-    const todayEnd = todayStart + 86400000;
+  // Load all goal data from Supabase
+  const loadGoalData = useCallback(async () => {
+    if (!user) return;
 
-    let todayPresentations = 0;
-    let todayForms = 0;
-    let todaySupports = 0;
-    let todayAmount = 0;
+    setIsLoading(true);
+    setError(null);
 
-    let totalPresentations = 0;
-    let totalForms = 0;
-    let totalSupports = 0;
-    let totalAmount = 0;
-
-    apartments.forEach(apt => {
-      Object.values(apt.rooms).forEach((floor: Room[]) => {
-        floor.forEach(room => {
-          if (room.status !== 'unvisited') {
-            totalPresentations++;
-            if (room.updatedAt && room.updatedAt >= todayStart && room.updatedAt < todayEnd) {
-              todayPresentations++;
-            }
-          }
-          if (room.status === 'donated') {
-            totalForms++;
-            const supports = room.supportsCount || Math.floor((room.amountDonated || 0) / SUPPORT_VALUE);
-            totalSupports += supports;
-            totalAmount += room.amountDonated || 0;
-
-            if (room.updatedAt && room.updatedAt >= todayStart && room.updatedAt < todayEnd) {
-              todayForms++;
-              todaySupports += supports;
-              todayAmount += room.amountDonated || 0;
-            }
-          }
+    try {
+      // Load goal settings
+      const settingsResult = await getGoalSettings(user.id);
+      if (settingsResult.success && settingsResult.settings) {
+        const supabaseSettings = settingsResult.settings;
+        const { dailyTargets, weeklyTargets } = toGoalTargets(supabaseSettings);
+        const streak = toStreakData(supabaseSettings);
+        
+        setSettings({
+          dailyTargets,
+          weeklyTargets,
+          streak,
+          unlockedAchievements: [], // Will be loaded separately
         });
+      }
+
+      // Load today's progress (attributed to current user)
+      const todayResult = await getTodayProgress(user.id);
+      if (todayResult.success && todayResult.progress) {
+        setTodayProgress(todayResult.progress);
+      }
+
+      // Load week's progress
+      const weekResult = await getWeekProgress(user.id);
+      if (weekResult.success && weekResult.progress) {
+        setWeekProgress(weekResult.progress);
+      }
+
+      // Load total stats
+      const statsResult = await getTotalStats(user.id);
+      if (statsResult.success && statsResult.stats) {
+        setTotalStats(statsResult.stats);
+      }
+
+      // Load achievements
+      const achievementsResult = await getAchievements(user.id);
+      if (achievementsResult.success && achievementsResult.achievements) {
+        setAchievements(achievementsResult.achievements);
+        
+        // Update settings with unlocked achievement IDs
+        const unlockedIds = achievementsResult.achievements
+          .filter(a => a.unlockedAt)
+          .map(a => a.id);
+        
+        setSettings(prev => prev ? { ...prev, unlockedAchievements: unlockedIds } : null);
+      }
+
+      // Check for new achievements
+      const checkResult = await checkAchievements(user.id);
+      if (checkResult.success && checkResult.newlyUnlocked && checkResult.newlyUnlocked.length > 0) {
+        setNewlyUnlocked(checkResult.newlyUnlocked);
+        // Refresh achievements list
+        const refreshResult = await getAchievements(user.id);
+        if (refreshResult.success && refreshResult.achievements) {
+          setAchievements(refreshResult.achievements);
+        }
+      }
+
+    } catch (err) {
+      console.error('Error loading goal data:', err);
+      setError('Failed to load goal data');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [user]);
+
+  // Load data on mount and when user changes
+  useEffect(() => {
+    loadGoalData();
+  }, [loadGoalData]);
+
+  // Handle saving settings
+  const handleSaveSettings = async (newSettings: GoalSettings) => {
+    if (!user) return;
+
+    try {
+      const result = await updateGoalSettings(user.id, {
+        daily_presentations: newSettings.dailyTargets.presentations,
+        daily_forms: newSettings.dailyTargets.forms,
+        daily_supports: newSettings.dailyTargets.supports,
+        weekly_presentations: newSettings.weeklyTargets.presentations,
+        weekly_forms: newSettings.weeklyTargets.forms,
+        weekly_supports: newSettings.weeklyTargets.supports,
       });
-    });
 
-    return {
-      today: { presentations: todayPresentations, forms: todayForms, supports: todaySupports, amount: todayAmount },
-      total: { presentations: totalPresentations, forms: totalForms, supports: totalSupports, amount: totalAmount }
-    };
-  }, [apartments]);
-
-  // Calculate week progress
-  const weekProgress = useMemo(() => {
-    const now = new Date();
-    const day = now.getDay();
-    const diff = now.getDate() - day + (day === 0 ? -6 : 1);
-    const weekStart = new Date(now.setDate(diff));
-    weekStart.setHours(0, 0, 0, 0);
-    const weekEnd = new Date(weekStart);
-    weekEnd.setDate(weekEnd.getDate() + 7);
-
-    let presentations = 0, forms = 0, supports = 0, amount = 0;
-
-    apartments.forEach(apt => {
-      Object.values(apt.rooms).forEach((floor: Room[]) => {
-        floor.forEach(room => {
-          if (room.updatedAt && room.updatedAt >= weekStart.getTime() && room.updatedAt < weekEnd.getTime()) {
-            if (room.status !== 'unvisited') presentations++;
-            if (room.status === 'donated') {
-              forms++;
-              supports += room.supportsCount || Math.floor((room.amountDonated || 0) / SUPPORT_VALUE);
-              amount += room.amountDonated || 0;
-            }
-          }
-        });
-      });
-    });
-
-    return { presentations, forms, supports, amount };
-  }, [apartments]);
-
-  const handleSaveSettings = (newSettings: GoalSettings) => {
-    setSettings(newSettings);
-    saveGoalSettings(newSettings);
-    setShowSettings(false);
+      if (result.success) {
+        setSettings(newSettings);
+        setShowSettings(false);
+      } else {
+        setError(result.error || 'Failed to save settings');
+      }
+    } catch (err) {
+      console.error('Error saving settings:', err);
+      setError('Failed to save settings');
+    }
   };
+
+  // Dismiss newly unlocked achievements notification
+  const dismissNewAchievements = () => {
+    setNewlyUnlocked([]);
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center p-8">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-4 bg-red-50 dark:bg-red-900/20 rounded-xl text-red-600 dark:text-red-400">
+        <p>{error}</p>
+        <button 
+          onClick={loadGoalData}
+          className="mt-2 text-sm underline hover:no-underline"
+        >
+          Try again
+        </button>
+      </div>
+    );
+  }
+
+  if (!settings) {
+    return null;
+  }
 
   const dailyTargets = settings.dailyTargets;
   const weeklyTargets = settings.weeklyTargets;
 
   return (
     <div className="space-y-4">
+      {/* New Achievement Notification */}
+      {newlyUnlocked.length > 0 && (
+        <div className="bg-gradient-to-r from-amber-500 to-yellow-500 p-4 rounded-xl text-white">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Trophy size={24} />
+              <div>
+                <p className="font-bold">Achievement Unlocked!</p>
+                <p className="text-sm opacity-90">
+                  {newlyUnlocked.map(a => a.title).join(', ')}
+                </p>
+              </div>
+            </div>
+            <button 
+              onClick={dismissNewAchievements}
+              className="p-1 hover:bg-white/20 rounded"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
@@ -158,21 +252,21 @@ export default function GoalTracker({ apartments }: GoalTrackerProps) {
         <div className="grid grid-cols-3 gap-3">
           <ProgressCard
             label="Presentations"
-            current={actualProgress.today.presentations}
+            current={todayProgress?.presentations || 0}
             target={dailyTargets.presentations}
             icon={<Users size={16} />}
             color="blue"
           />
           <ProgressCard
             label="Forms"
-            current={actualProgress.today.forms}
+            current={todayProgress?.forms || 0}
             target={dailyTargets.forms}
             icon={<FileText size={16} />}
             color="green"
           />
           <ProgressCard
             label="Supports"
-            current={actualProgress.today.supports}
+            current={todayProgress?.supports || 0}
             target={dailyTargets.supports}
             icon={<Heart size={16} />}
             color="pink"
@@ -190,21 +284,21 @@ export default function GoalTracker({ apartments }: GoalTrackerProps) {
         <div className="grid grid-cols-3 gap-3">
           <ProgressCard
             label="Presentations"
-            current={weekProgress.presentations}
+            current={weekProgress?.presentations || 0}
             target={weeklyTargets.presentations}
             icon={<Users size={16} />}
             color="purple"
           />
           <ProgressCard
             label="Forms"
-            current={weekProgress.forms}
+            current={weekProgress?.forms || 0}
             target={weeklyTargets.forms}
             icon={<FileText size={16} />}
             color="emerald"
           />
           <ProgressCard
             label="Supports"
-            current={weekProgress.supports}
+            current={weekProgress?.supports || 0}
             target={weeklyTargets.supports}
             icon={<Heart size={16} />}
             color="rose"
@@ -217,19 +311,19 @@ export default function GoalTracker({ apartments }: GoalTrackerProps) {
         <p className="text-xs uppercase tracking-wider opacity-60 mb-3">All Time Stats</p>
         <div className="grid grid-cols-4 gap-2 text-center">
           <div>
-            <p className="text-xl font-bold">{actualProgress.total.presentations}</p>
+            <p className="text-xl font-bold">{totalStats?.presentations || 0}</p>
             <p className="text-[10px] opacity-60">Visits</p>
           </div>
           <div>
-            <p className="text-xl font-bold">{actualProgress.total.forms}</p>
+            <p className="text-xl font-bold">{totalStats?.forms || 0}</p>
             <p className="text-[10px] opacity-60">Forms</p>
           </div>
           <div>
-            <p className="text-xl font-bold">{actualProgress.total.supports}</p>
+            <p className="text-xl font-bold">{totalStats?.supports || 0}</p>
             <p className="text-[10px] opacity-60">Supports</p>
           </div>
           <div>
-            <p className="text-xl font-bold">₹{(actualProgress.total.amount / 1000).toFixed(0)}K</p>
+            <p className="text-xl font-bold">₹{((totalStats?.amount || 0) / 1000).toFixed(0)}K</p>
             <p className="text-[10px] opacity-60">Raised</p>
           </div>
         </div>
@@ -247,8 +341,8 @@ export default function GoalTracker({ apartments }: GoalTrackerProps) {
       <AchievementsModal
         isOpen={showAchievements}
         onClose={() => setShowAchievements(false)}
-        unlockedIds={settings.unlockedAchievements}
-        totalStats={actualProgress.total}
+        achievements={achievements}
+        totalStats={totalStats || { presentations: 0, forms: 0, supports: 0, amount: 0 }}
         streak={settings.streak.currentStreak}
       />
     </div>
@@ -310,6 +404,7 @@ function GoalSettingsModal({
 }) {
   const [daily, setDaily] = useState(settings.dailyTargets);
   const [weekly, setWeekly] = useState(settings.weeklyTargets);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -318,8 +413,13 @@ function GoalSettingsModal({
     }
   }, [isOpen, settings]);
 
-  const handleSave = () => {
-    onSave({ ...settings, dailyTargets: daily, weeklyTargets: weekly });
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      await onSave({ ...settings, dailyTargets: daily, weeklyTargets: weekly });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -402,10 +502,15 @@ function GoalSettingsModal({
 
         <button
           onClick={handleSave}
-          className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
+          disabled={isSaving}
+          className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
         >
-          <Save size={18} />
-          Save Goals
+          {isSaving ? (
+            <Loader2 size={18} className="animate-spin" />
+          ) : (
+            <Save size={18} />
+          )}
+          {isSaving ? 'Saving...' : 'Save Goals'}
         </button>
       </div>
     </Modal>
@@ -414,15 +519,15 @@ function GoalSettingsModal({
 
 // Achievements Modal
 function AchievementsModal({
-  isOpen, onClose, unlockedIds, totalStats, streak
+  isOpen, onClose, achievements, totalStats, streak
 }: {
   isOpen: boolean;
   onClose: () => void;
-  unlockedIds: string[];
+  achievements: Achievement[];
   totalStats: { presentations: number; forms: number; supports: number; amount: number };
   streak: number;
 }) {
-  const getProgress = (achievement: typeof ACHIEVEMENTS[0]) => {
+  const getProgress = (achievement: Achievement) => {
     let current = 0;
     switch (achievement.requirement.type) {
       case 'presentations': current = totalStats.presentations; break;
@@ -437,8 +542,8 @@ function AchievementsModal({
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Achievements">
       <div className="space-y-3 max-h-[60vh] overflow-y-auto">
-        {ACHIEVEMENTS.map(achievement => {
-          const isUnlocked = unlockedIds.includes(achievement.id);
+        {achievements.map(achievement => {
+          const isUnlocked = !!achievement.unlockedAt;
           const { current, target } = getProgress(achievement);
           const percentage = Math.min(100, Math.round((current / target) * 100));
 

@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Room, RoomStatus, SUPPORT_VALUE } from '../types';
 import { STATUS_CONFIG, FUNDRAISING_SCRIPTS } from '../constants';
-import { X, Save, User, MessageSquare, StickyNote, IndianRupee, Check, BookOpen, Info, Copy, Clock, Calendar, Phone, Mail, MapPin, CreditCard, Heart, FileText } from 'lucide-react';
+import { X, Save, User, MessageSquare, StickyNote, IndianRupee, Check, BookOpen, Info, Copy, Clock, Calendar, Phone, Mail, MapPin, CreditCard, Heart, FileText, Users, UserCheck } from 'lucide-react';
 import { cn } from '../utils/cn';
 import Modal from './ui/Modal';
 import VoiceInputButton from './ui/VoiceInputButton';
+import { useAuth } from '../contexts/AuthContext';
+import { getTeamMembers, type TeamMember } from '../services/supabase/teamService';
 
 interface RoomModalProps {
   room: Room;
@@ -17,6 +19,11 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, isOpen, onClose, onSave }) 
   const [formData, setFormData] = useState<Partial<Room>>({});
   const [activeTab, setActiveTab] = useState<'details' | 'scripts'>('details');
   const [copiedScriptId, setCopiedScriptId] = useState<string | null>(null);
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+  const [loadingMembers, setLoadingMembers] = useState(false);
+  
+  // Get auth context for current user and team
+  const { user, profile, currentTeam } = useAuth();
 
   // Helper to format date for input type="datetime-local" (YYYY-MM-DDThh:mm)
   const toLocalISOString = (timestamp: number) => {
@@ -25,6 +32,27 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, isOpen, onClose, onSave }) 
     const localISOTime = (new Date(date.getTime() - offset)).toISOString().slice(0, 16);
     return localISOTime;
   };
+
+  // Fetch team members when modal opens
+  useEffect(() => {
+    const fetchTeamMembers = async () => {
+      if (isOpen && currentTeam) {
+        setLoadingMembers(true);
+        try {
+          const result = await getTeamMembers(currentTeam.id);
+          if (result.success && result.members) {
+            setTeamMembers(result.members);
+          }
+        } catch (err) {
+          console.error('Error fetching team members:', err);
+        } finally {
+          setLoadingMembers(false);
+        }
+      }
+    };
+    
+    fetchTeamMembers();
+  }, [isOpen, currentTeam]);
 
   useEffect(() => {
     if (isOpen) {
@@ -43,15 +71,32 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, isOpen, onClose, onSave }) 
         paymentMode: room.paymentMode || 'cash',
         supportsCount: room.supportsCount || 0,
         // If room has a time, use it. If not, default to NOW (for the input).
-        updatedAt: room.updatedAt || Date.now()
+        updatedAt: room.updatedAt || Date.now(),
+        // Attribution - default to current user if not set
+        collectedBy: room.collectedBy || user?.id || '',
+        enteredBy: room.enteredBy || user?.id || '',
+        collectedByName: room.collectedByName || profile?.name || '',
+        enteredByName: room.enteredByName || profile?.name || '',
       });
       setActiveTab('details'); // Reset to details on open
     }
-  }, [isOpen, room]);
+  }, [isOpen, room, user, profile]);
 
   const handleSave = () => {
-    onSave(room.id, formData);
+    // Always set entered_by to current user when saving
+    const dataToSave = {
+      ...formData,
+      enteredBy: user?.id || formData.enteredBy,
+      enteredByName: profile?.name || formData.enteredByName,
+    };
+    onSave(room.id, dataToSave);
     onClose();
+  };
+
+  // Helper to get member name by ID
+  const getMemberName = (memberId: string): string => {
+    const member = teamMembers.find(m => m.user_id === memberId);
+    return member?.profile.name || 'Unknown';
   };
 
   const copyToClipboard = (text: string, id: string) => {
@@ -382,6 +427,75 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, isOpen, onClose, onSave }) 
                           placeholder="PAN Number (for 80G)"
                           maxLength={10}
                         />
+                      </div>
+                    </div>
+
+                    {/* Attribution Section - Who collected the donation */}
+                    <div className="bg-purple-50 dark:bg-purple-900/20 p-4 rounded-xl border border-purple-100 dark:border-purple-900/50 space-y-3">
+                      <label className="text-xs font-bold text-purple-600 dark:text-purple-400 uppercase tracking-wider flex items-center gap-2">
+                        <Users size={14} />
+                        Donation Attribution
+                      </label>
+
+                      {/* Collected By Dropdown */}
+                      <div>
+                        <label className="text-[10px] uppercase text-slate-400 font-bold block mb-1">Collected By</label>
+                        <div className="relative">
+                          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <UserCheck size={16} className="text-purple-400" />
+                          </div>
+                          <select
+                            value={formData.collectedBy || user?.id || ''}
+                            onChange={(e) => {
+                              const selectedMember = teamMembers.find(m => m.user_id === e.target.value);
+                              setFormData({ 
+                                ...formData, 
+                                collectedBy: e.target.value,
+                                collectedByName: selectedMember?.profile.name || profile?.name || ''
+                              });
+                            }}
+                            className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-slate-800 border border-purple-200 dark:border-purple-800 rounded-lg text-sm appearance-none cursor-pointer"
+                            disabled={loadingMembers}
+                          >
+                            {loadingMembers ? (
+                              <option>Loading team members...</option>
+                            ) : teamMembers.length > 0 ? (
+                              teamMembers.map((member) => (
+                                <option key={member.user_id} value={member.user_id}>
+                                  {member.profile.name} {member.user_id === user?.id ? '(You)' : ''}
+                                </option>
+                              ))
+                            ) : (
+                              <option value={user?.id || ''}>{profile?.name || 'Current User'}</option>
+                            )}
+                          </select>
+                          <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                            <svg className="h-4 w-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                            </svg>
+                          </div>
+                        </div>
+                        <p className="text-[10px] text-slate-400 mt-1">
+                          Select the team member who collected this donation
+                        </p>
+                      </div>
+
+                      {/* Display Entered By (read-only) */}
+                      <div>
+                        <label className="text-[10px] uppercase text-slate-400 font-bold block mb-1">Data Entered By</label>
+                        <div className="relative">
+                          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <User size={16} className="text-slate-400" />
+                          </div>
+                          <input
+                            value={profile?.name || 'You'}
+                            readOnly
+                            className="w-full pl-10 pr-4 py-2.5 bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-500 dark:text-slate-400 cursor-not-allowed"
+                          />
+                        </div>
+                        <p className="text-[10px] text-slate-400 mt-1">
+                          Automatically set to the person saving this record
+                        </p>
                       </div>
                     </div>
                   </div>

@@ -2,6 +2,37 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ===== GLOBAL MOBILE SCROLLING FIX ===== */
+html {
+  height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+body {
+  min-height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+#root {
+  min-height: 100%;
+  overflow-x: hidden;
+}
+
+/* Ensure all full-screen containers can scroll on mobile */
+.min-h-screen {
+  min-height: 100vh;
+  min-height: 100dvh; /* Dynamic viewport height for mobile */
+}
+
+/* Fix iOS Safari viewport height issues */
+@supports (-webkit-touch-callout: none) {
+  .min-h-screen {
+    min-height: -webkit-fill-available;
+  }
+}
+
 /* ===== ACCESSIBILITY STYLES ===== */
 
 /* High Contrast Mode */

@@ -64,7 +64,7 @@ export const updateRoomInApartment = (
 ): Apartment[] => {
   return apartments.map((a) => {
     if (a.id !== apartmentId) return a;
-    
+
     // Deep copy rooms for immutability
     const newRooms = { ...a.rooms };
     if (!newRooms[floor]) return a;
@@ -88,7 +88,9 @@ export const resizeApartment = (
   newName: string,
   newFloorCount: number,
   newUnitCount: number,
-  newTargetAmount?: number
+  newTargetAmount?: number,
+  newLatitude?: number,
+  newLongitude?: number
 ): Apartment[] => {
   return apartments.map(apt => {
     if (apt.id !== apartmentId) return apt;
@@ -98,54 +100,56 @@ export const resizeApartment = (
     // Iterate up to the new floor count
     for (let f = newFloorCount; f >= 1; f--) {
       const existingFloor = apt.rooms[f];
-      
+
       if (existingFloor) {
         // Floor exists, resize units
         if (newUnitCount > existingFloor.length) {
-            // Add units
-            const unitsToAdd = newUnitCount - existingFloor.length;
-            const newUnits = Array.from({ length: unitsToAdd }, (_, i) => {
-                const roomNumber = f * 100 + (existingFloor.length + i + 1);
-                return {
-                    id: `${f}-${existingFloor.length + i + 1}-${uid()}`,
-                    roomNumber,
-                    visitorName: "",
-                    remark: "",
-                    status: 'unvisited',
-                    note: "",
-                    updatedAt: null,
-                } as Room;
-            });
-            updatedRooms[f] = [...existingFloor, ...newUnits];
+          // Add units
+          const unitsToAdd = newUnitCount - existingFloor.length;
+          const newUnits = Array.from({ length: unitsToAdd }, (_, i) => {
+            const roomNumber = f * 100 + (existingFloor.length + i + 1);
+            return {
+              id: `${f}-${existingFloor.length + i + 1}-${uid()}`,
+              roomNumber,
+              visitorName: "",
+              remark: "",
+              status: 'unvisited',
+              note: "",
+              updatedAt: null,
+            } as Room;
+          });
+          updatedRooms[f] = [...existingFloor, ...newUnits];
         } else {
-            // Remove/Keep units (slice)
-            // Warning: Data in truncated rooms will be lost.
-            updatedRooms[f] = existingFloor.slice(0, newUnitCount);
+          // Remove/Keep units (slice)
+          // Warning: Data in truncated rooms will be lost.
+          updatedRooms[f] = existingFloor.slice(0, newUnitCount);
         }
       } else {
         // Create new floor
-         updatedRooms[f] = Array.from({ length: newUnitCount }, (_, i) => {
-            const roomNumber = f * 100 + (i + 1);
-            return {
-                id: `${f}-${i + 1}-${uid()}`,
-                roomNumber,
-                visitorName: "",
-                remark: "",
-                status: 'unvisited',
-                note: "",
-                updatedAt: null,
-            } as Room;
+        updatedRooms[f] = Array.from({ length: newUnitCount }, (_, i) => {
+          const roomNumber = f * 100 + (i + 1);
+          return {
+            id: `${f}-${i + 1}-${uid()}`,
+            roomNumber,
+            visitorName: "",
+            remark: "",
+            status: 'unvisited',
+            note: "",
+            updatedAt: null,
+          } as Room;
         });
       }
     }
 
     return {
-        ...apt,
-        name: newName,
-        floors: newFloorCount,
-        unitsPerFloor: newUnitCount,
-        targetAmount: newTargetAmount !== undefined ? newTargetAmount : apt.targetAmount,
-        rooms: updatedRooms
+      ...apt,
+      name: newName,
+      floors: newFloorCount,
+      unitsPerFloor: newUnitCount,
+      targetAmount: newTargetAmount !== undefined ? newTargetAmount : apt.targetAmount,
+      latitude: newLatitude !== undefined ? newLatitude : apt.latitude,
+      longitude: newLongitude !== undefined ? newLongitude : apt.longitude,
+      rooms: updatedRooms
     };
   });
 };
@@ -185,7 +189,7 @@ export const exportToCSV = (apartments: Apartment[]) => {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `doorstep_export_${new Date().toISOString().slice(0,10)}.csv`;
+  link.download = `doorstep_export_${new Date().toISOString().slice(0, 10)}.csv`;
   link.click();
 };
 
@@ -197,7 +201,7 @@ export const exportBackupJSON = (apartments: Apartment[]) => {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `doorstep_backup_${new Date().toISOString().slice(0,10)}.json`;
+  link.download = `doorstep_backup_${new Date().toISOString().slice(0, 10)}.json`;
   link.click();
 };
 
@@ -212,7 +216,7 @@ export const validateAndParseImport = async (file: File): Promise<Apartment[]> =
         }
         // Basic schema check (check if first item has 'id' and 'rooms')
         if (json.length > 0 && (!json[0].id || !json[0].rooms)) {
-             throw new Error("Invalid format: Missing required apartment fields");
+          throw new Error("Invalid format: Missing required apartment fields");
         }
         resolve(json);
       } catch (err) {

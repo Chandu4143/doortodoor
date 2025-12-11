@@ -1,31 +1,105 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
-  Accessibility, Eye, Hand, Type, Sun, Moon, 
-  Check, ChevronRight 
+  Accessibility, Eye, Hand, Type, Loader2, AlertCircle
 } from 'lucide-react';
 import { AccessibilitySettings } from '../types';
-import { loadAccessibilitySettings, saveAccessibilitySettings } from '../services/accessibilityService';
+import { 
+  loadAccessibilitySettings, 
+  saveAccessibilitySettings,
+  applyAccessibilitySettings 
+} from '../services/accessibilityService';
+import { 
+  updateAccessibilitySettings as updateSupabaseSettings,
+  getAccessibilitySettings as getSupabaseSettings
+} from '../services/supabase/profileService';
+import { useAuth } from '../contexts/AuthContext';
 import { cn } from '../utils/cn';
 
 export default function AccessibilityPanel() {
+  const { user, profile, refreshProfile } = useAuth();
   const [settings, setSettings] = useState<AccessibilitySettings>(loadAccessibilitySettings());
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
-  const updateSetting = <K extends keyof AccessibilitySettings>(
+  // Load settings from Supabase when authenticated
+  useEffect(() => {
+    const loadSettings = async () => {
+      if (user && profile?.accessibility_settings) {
+        // Use settings from profile if available
+        setSettings(profile.accessibility_settings);
+        applyAccessibilitySettings(profile.accessibility_settings);
+      } else if (user) {
+        // Fetch from Supabase if user is authenticated but profile settings not loaded
+        try {
+          const supabaseSettings = await getSupabaseSettings();
+          setSettings(supabaseSettings);
+          applyAccessibilitySettings(supabaseSettings);
+        } catch (err) {
+          console.error('Error loading accessibility settings:', err);
+        }
+      }
+    };
+
+    loadSettings();
+  }, [user, profile?.accessibility_settings]);
+
+  const updateSetting = useCallback(async <K extends keyof AccessibilitySettings>(
     key: K, 
     value: AccessibilitySettings[K]
   ) => {
     const newSettings = { ...settings, [key]: value };
     setSettings(newSettings);
+    setSaveError(null);
+    
+    // Apply settings immediately to DOM
+    applyAccessibilitySettings(newSettings);
+    
+    // Always save to localStorage for immediate persistence
     saveAccessibilitySettings(newSettings);
-  };
+    
+    // If authenticated, also save to Supabase
+    if (user) {
+      setIsSaving(true);
+      try {
+        const result = await updateSupabaseSettings(newSettings);
+        if (!result.success) {
+          setSaveError(result.error || 'Failed to save settings');
+        } else {
+          // Refresh profile to sync state
+          await refreshProfile();
+        }
+      } catch (err) {
+        setSaveError('Failed to save settings to cloud');
+        console.error('Error saving accessibility settings:', err);
+      } finally {
+        setIsSaving(false);
+      }
+    }
+  }, [settings, user, refreshProfile]);
 
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex items-center gap-2">
-        <Accessibility size={20} className="text-indigo-500" />
-        <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">Accessibility</h2>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Accessibility size={20} className="text-indigo-500" />
+          <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">Accessibility</h2>
+        </div>
+        {isSaving && (
+          <div className="flex items-center gap-1 text-xs text-slate-500">
+            <Loader2 size={14} className="animate-spin" />
+            <span>Saving...</span>
+          </div>
+        )}
       </div>
+
+      {/* Error Message */}
+      {saveError && (
+        <div className="flex items-center gap-2 p-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-lg text-sm">
+          <AlertCircle size={16} />
+          <span>{saveError}</span>
+        </div>
+      )}
 
       {/* Settings List */}
       <div className="space-y-3">

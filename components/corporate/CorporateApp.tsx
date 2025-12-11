@@ -1,4 +1,10 @@
-import React, { useState, useEffect, useMemo } from 'react';
+/**
+ * CorporateApp Component
+ * Main application for corporate/business campaigns
+ * Requirements: 8.3
+ */
+
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import Layout from '../Layout';
 import CorporateSidebar from './CorporateSidebar';
 import CorporateCampaignView from './CorporateCampaignView';
@@ -16,12 +22,19 @@ import {
   updateCampaign, exportCorporateToCSV, validateAndParseCorporateImport
 } from '../../services/corporateStorageService';
 import { initAccessibility } from '../../services/accessibilityService';
+import { useAuth } from '../../contexts/AuthContext';
+import { 
+  onConnectionStateChange,
+  type ConnectionState
+} from '../../services/supabase/realtimeService';
+import { useNavigationHistory, type NavigationState } from '../../hooks/useNavigationHistory';
 
 interface CorporateAppProps {
   onGoHome: () => void;
 }
 
 export default function CorporateApp({ onGoHome }: CorporateAppProps) {
+  const { currentTeam } = useAuth();
   const [campaigns, setCampaigns] = useState<BusinessCampaign[]>([]);
   const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'dashboard' | 'campaign' | 'goals' | 'team' | 'accessibility'>('dashboard');
@@ -31,11 +44,45 @@ export default function CorporateApp({ onGoHome }: CorporateAppProps) {
   const [editingBusiness, setEditingBusiness] = useState<{ businessId: string; campaignId: string } | null>(null);
   const [showAddBusiness, setShowAddBusiness] = useState(false);
   const [editingCampaign, setEditingCampaign] = useState<BusinessCampaign | null>(null);
+  const [connectionState, setConnectionState] = useState<ConnectionState>('disconnected');
+
+  // --- Browser History Navigation ---
+  // Handle back button navigation within corporate mode
+  const handleHistoryNavigation = useCallback((navState: NavigationState) => {
+    if (navState.appMode === 'home') {
+      onGoHome();
+    } else if (navState.appMode === 'corporate') {
+      // Map 'apartment' viewMode to 'campaign' for corporate
+      const corpViewMode = navState.viewMode === 'apartment' ? 'campaign' : navState.viewMode;
+      if (corpViewMode) {
+        setViewMode(corpViewMode as typeof viewMode);
+      }
+      if (navState.apartmentId !== undefined) {
+        setSelectedCampaignId(navState.apartmentId);
+      }
+    }
+  }, [onGoHome]);
+
+  useNavigationHistory({
+    state: {
+      appMode: 'corporate',
+      viewMode: viewMode === 'campaign' ? 'apartment' : viewMode, // Map to common type
+      apartmentId: selectedCampaignId,
+    },
+    onNavigate: handleHistoryNavigation,
+  });
 
   useEffect(() => {
     setCampaigns(loadCampaigns());
     initAccessibility();
     if (window.innerWidth >= 768) setIsSidebarOpen(true);
+    
+    // Listen for connection state changes
+    const unsubscribe = onConnectionStateChange((state) => {
+      setConnectionState(state);
+    });
+    
+    return () => unsubscribe();
   }, []);
 
   useEffect(() => {
@@ -109,6 +156,7 @@ export default function CorporateApp({ onGoHome }: CorporateAppProps) {
           onSelectCampaign={(id) => { setSelectedCampaignId(id); if (id) { setViewMode('campaign'); if (window.innerWidth < 768) setIsSidebarOpen(false); } }}
           campaigns={campaigns} onCreateCampaign={handleCreateCampaign} onDeleteCampaign={handleDeleteCampaign}
           onExportCSV={() => exportCorporateToCSV(campaigns)} onOpenRestoration={() => setShowDataModal(true)}
+          connectionState={connectionState}
         />
       }
     >

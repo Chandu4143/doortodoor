@@ -1,3 +1,9 @@
+/**
+ * Sidebar Component
+ * Main navigation sidebar for residential campaigns
+ * Requirements: 8.1
+ */
+
 import React, { useState } from 'react';
 import {
     Home,
@@ -11,18 +17,26 @@ import {
     FileText,
     Target,
     Users,
-    Accessibility
+    Accessibility,
+    Wifi,
+    WifiOff,
+    LogOut,
+    User,
+    Trophy,
+    Globe
 } from 'lucide-react';
 import { Apartment } from '../types';
 import { cn } from '../utils/cn';
 import { generatePDFReport } from '../services/pdfService';
+import { useAuth } from '../contexts/AuthContext';
+import type { ConnectionState } from '../services/supabase/realtimeService';
 
 interface SidebarProps {
     isOpen: boolean;
     onClose: () => void;
     onGoHome: () => void;
-    viewMode: 'dashboard' | 'apartment' | 'goals' | 'team' | 'accessibility';
-    setViewMode: (mode: 'dashboard' | 'apartment' | 'goals' | 'team' | 'accessibility') => void;
+    viewMode: 'dashboard' | 'apartment' | 'goals' | 'team' | 'accessibility' | 'leaderboard' | 'global';
+    setViewMode: (mode: 'dashboard' | 'apartment' | 'goals' | 'team' | 'accessibility' | 'leaderboard' | 'global') => void;
     selectedApartmentId: string | null;
     onSelectApartment: (id: string | null) => void;
     apartments: Apartment[];
@@ -30,6 +44,7 @@ interface SidebarProps {
     onDeleteApartment: (id: string) => void;
     onExportCSV: () => void;
     onOpenRestoration: () => void;
+    connectionState?: ConnectionState;
 }
 
 export default function Sidebar({
@@ -44,8 +59,10 @@ export default function Sidebar({
     onCreateApartment,
     onDeleteApartment,
     onExportCSV,
-    onOpenRestoration
+    onOpenRestoration,
+    connectionState = 'disconnected'
 }: SidebarProps) {
+    const { profile, currentTeam, signOut } = useAuth();
     const [showCreateForm, setShowCreateForm] = useState(false);
     const [newAptName, setNewAptName] = useState('');
     const [newFloors, setNewFloors] = useState(5);
@@ -58,6 +75,22 @@ export default function Sidebar({
         setNewAptName('');
         setNewTarget(0);
         setShowCreateForm(false);
+    };
+
+    // Connection status indicator
+    const ConnectionIndicator = () => {
+        const isConnected = connectionState === 'connected';
+        return (
+            <div className={cn(
+                "flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded-full",
+                isConnected
+                    ? "text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20"
+                    : "text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800"
+            )}>
+                {isConnected ? <Wifi size={12} /> : <WifiOff size={12} />}
+                {isConnected ? 'Synced' : 'Offline'}
+            </div>
+        );
     };
 
     return (
@@ -75,9 +108,12 @@ export default function Sidebar({
                     </div>
                     DoorStep
                 </div>
-                <button onClick={onClose} className="md:hidden text-slate-400 p-2 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg">
-                    <ChevronLeft />
-                </button>
+                <div className="flex items-center gap-2">
+                    <ConnectionIndicator />
+                    <button onClick={onClose} className="md:hidden text-slate-400 p-2 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg">
+                        <ChevronLeft />
+                    </button>
+                </div>
             </div>
 
             <div className="px-4 py-2 flex-1 overflow-y-auto space-y-6 custom-scrollbar">
@@ -115,6 +151,35 @@ export default function Sidebar({
                         <Target size={20} className={viewMode === 'goals' ? 'text-amber-600 dark:text-amber-400' : 'text-slate-400'} />
                         Goals & Streaks
                     </button>
+                    <button
+                        onClick={() => { setViewMode('leaderboard'); onSelectApartment(null); }}
+                        className={cn(
+                            "w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-200",
+                            viewMode === 'leaderboard'
+                                ? "bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-400 shadow-sm"
+                                : "text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-200"
+                        )}
+                    >
+                        <Trophy size={20} className={viewMode === 'leaderboard' ? 'text-yellow-600 dark:text-yellow-400' : 'text-slate-400'} />
+                        Leaderboard
+                    </button>
+
+                    {/* Global Dashboard (Admin Only) */}
+                    {profile && ['dev', 'owner', 'bdm'].includes(profile.role) && (
+                        <button
+                            onClick={() => { setViewMode('global'); onSelectApartment(null); }}
+                            className={cn(
+                                "w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-200",
+                                viewMode === 'global'
+                                    ? "bg-slate-800 text-white shadow-sm"
+                                    : "text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-200"
+                            )}
+                        >
+                            <Globe size={20} className={viewMode === 'global' ? 'text-white' : 'text-slate-400'} />
+                            Global View
+                        </button>
+                    )}
+
                     <button
                         onClick={() => { setViewMode('team'); onSelectApartment(null); }}
                         className={cn(

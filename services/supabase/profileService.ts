@@ -295,8 +295,13 @@ function isValidEmail(email: string): boolean {
  * Checks if a profile exists for the current user
  */
 export async function hasProfile(): Promise<boolean> {
-  const profile = await getCurrentProfile();
-  return profile !== null && profile.name.length > 0;
+  try {
+    const profile = await getCurrentProfile();
+    return profile !== null && profile.name.length > 0;
+  } catch (err) {
+    console.error('Error checking if profile exists:', err);
+    return false;
+  }
 }
 
 /**

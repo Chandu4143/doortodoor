@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Business, BusinessStatus, BusinessCategory } from '../../types';
 import { BUSINESS_STATUS_CONFIG, BUSINESS_CATEGORY_CONFIG } from '../../constants';
-import { X, Save, User, Phone, Mail, MapPin, StickyNote, IndianRupee, Check, Clock, Building2 } from 'lucide-react';
+import { X, Save, User, Phone, Mail, MapPin, StickyNote, IndianRupee, Check, Clock, Building2, Users, UserCheck } from 'lucide-react';
 import { cn } from '../../utils/cn';
 import Modal from '../ui/Modal';
 import VoiceInputButton from '../ui/VoiceInputButton';
+import { useAuth } from '../../contexts/AuthContext';
+import { getTeamMembers, type TeamMember } from '../../services/supabase/teamService';
 
 interface BusinessModalProps {
   business: Business | null;
@@ -20,6 +22,11 @@ const BusinessModal: React.FC<BusinessModalProps> = ({
   business, isOpen, onClose, onSave, onDelete, isNew, onCreateNew 
 }) => {
   const [formData, setFormData] = useState<Partial<Business>>({});
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+  const [loadingMembers, setLoadingMembers] = useState(false);
+  
+  // Get auth context for current user and team
+  const { user, profile, currentTeam } = useAuth();
 
   const toLocalISOString = (timestamp: number) => {
     const date = new Date(timestamp);
@@ -27,13 +34,39 @@ const BusinessModal: React.FC<BusinessModalProps> = ({
     return (new Date(date.getTime() - offset)).toISOString().slice(0, 16);
   };
 
+  // Fetch team members when modal opens
+  useEffect(() => {
+    const fetchTeamMembers = async () => {
+      if (isOpen && currentTeam) {
+        setLoadingMembers(true);
+        try {
+          const result = await getTeamMembers(currentTeam.id);
+          if (result.success && result.members) {
+            setTeamMembers(result.members);
+          }
+        } catch (err) {
+          console.error('Error fetching team members:', err);
+        } finally {
+          setLoadingMembers(false);
+        }
+      }
+    };
+    
+    fetchTeamMembers();
+  }, [isOpen, currentTeam]);
+
   useEffect(() => {
     if (isOpen) {
       if (isNew) {
         setFormData({
           name: '', contactPerson: '', phone: '', email: '', address: '',
           category: 'office', status: 'unvisited', note: '',
-          amountDonated: 0, amountPledged: 0, updatedAt: Date.now(), nextFollowUp: null
+          amountDonated: 0, amountPledged: 0, updatedAt: Date.now(), nextFollowUp: null,
+          // Attribution - default to current user for new records
+          collectedBy: user?.id || '',
+          enteredBy: user?.id || '',
+          collectedByName: profile?.name || '',
+          enteredByName: profile?.name || '',
         });
       } else if (business) {
         setFormData({
@@ -41,17 +74,29 @@ const BusinessModal: React.FC<BusinessModalProps> = ({
           email: business.email, address: business.address, category: business.category,
           status: business.status, note: business.note, amountDonated: business.amountDonated || 0,
           amountPledged: business.amountPledged || 0, updatedAt: business.updatedAt || Date.now(),
-          nextFollowUp: business.nextFollowUp
+          nextFollowUp: business.nextFollowUp,
+          // Attribution - preserve existing or default to current user
+          collectedBy: business.collectedBy || user?.id || '',
+          enteredBy: business.enteredBy || user?.id || '',
+          collectedByName: business.collectedByName || profile?.name || '',
+          enteredByName: business.enteredByName || profile?.name || '',
         });
       }
     }
-  }, [isOpen, business, isNew]);
+  }, [isOpen, business, isNew, user, profile]);
 
   const handleSave = () => {
+    // Always set entered_by to current user when saving
+    const dataToSave = {
+      ...formData,
+      enteredBy: user?.id || formData.enteredBy,
+      enteredByName: profile?.name || formData.enteredByName,
+    };
+    
     if (isNew && onCreateNew) {
-      onCreateNew(formData as Omit<Business, 'id'>);
+      onCreateNew(dataToSave as Omit<Business, 'id'>);
     } else if (business) {
-      onSave(business.id, formData);
+      onSave(business.id, dataToSave);
     }
     onClose();
   };
@@ -178,6 +223,75 @@ const BusinessModal: React.FC<BusinessModalProps> = ({
                   className="w-full pl-10 pr-4 py-3 bg-green-50 dark:bg-green-900/20 border-2 border-green-100 dark:border-green-800 rounded-xl focus:outline-none focus:border-green-500 focus:ring-4 focus:ring-green-500/10 transition-all font-mono font-bold text-lg text-green-700 dark:text-green-400"
                   placeholder="Custom amount"
                 />
+              </div>
+
+              {/* Attribution Section - Who collected the donation */}
+              <div className="bg-purple-50 dark:bg-purple-900/20 p-4 rounded-xl border border-purple-100 dark:border-purple-900/50 space-y-3 mt-4">
+                <label className="text-xs font-bold text-purple-600 dark:text-purple-400 uppercase tracking-wider flex items-center gap-2">
+                  <Users size={14} />
+                  Donation Attribution
+                </label>
+
+                {/* Collected By Dropdown */}
+                <div>
+                  <label className="text-[10px] uppercase text-slate-400 font-bold block mb-1">Collected By</label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <UserCheck size={16} className="text-purple-400" />
+                    </div>
+                    <select
+                      value={formData.collectedBy || user?.id || ''}
+                      onChange={(e) => {
+                        const selectedMember = teamMembers.find(m => m.user_id === e.target.value);
+                        setFormData({ 
+                          ...formData, 
+                          collectedBy: e.target.value,
+                          collectedByName: selectedMember?.profile.name || profile?.name || ''
+                        });
+                      }}
+                      className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-slate-800 border border-purple-200 dark:border-purple-800 rounded-lg text-sm appearance-none cursor-pointer"
+                      disabled={loadingMembers}
+                    >
+                      {loadingMembers ? (
+                        <option>Loading team members...</option>
+                      ) : teamMembers.length > 0 ? (
+                        teamMembers.map((member) => (
+                          <option key={member.user_id} value={member.user_id}>
+                            {member.profile.name} {member.user_id === user?.id ? '(You)' : ''}
+                          </option>
+                        ))
+                      ) : (
+                        <option value={user?.id || ''}>{profile?.name || 'Current User'}</option>
+                      )}
+                    </select>
+                    <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                      <svg className="h-4 w-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    Select the team member who collected this donation
+                  </p>
+                </div>
+
+                {/* Display Entered By (read-only) */}
+                <div>
+                  <label className="text-[10px] uppercase text-slate-400 font-bold block mb-1">Data Entered By</label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <User size={16} className="text-slate-400" />
+                    </div>
+                    <input
+                      value={profile?.name || 'You'}
+                      readOnly
+                      className="w-full pl-10 pr-4 py-2.5 bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-500 dark:text-slate-400 cursor-not-allowed"
+                    />
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    Automatically set to the person saving this record
+                  </p>
+                </div>
               </div>
             </div>
           )}

@@ -18,6 +18,11 @@ export interface Room {
   paymentMode?: 'cash' | 'upi' | 'card' | 'cheque' | 'online';
   // Support tracking (1 support = ₹1200)
   supportsCount?: number;
+  // Attribution - who collected vs who entered the data
+  collectedBy?: string; // User ID of team member who collected the donation
+  enteredBy?: string;   // User ID of team member who entered the data
+  collectedByName?: string; // Display name of collector (for UI)
+  enteredByName?: string;   // Display name of data entry person (for UI)
 }
 
 // ===== VOLUNTEER/TEAM TYPES =====
@@ -91,8 +96,10 @@ export interface Apartment {
   unitsPerFloor: number;
   createdAt: number;
   targetAmount?: number; // New: Fundraising Goal
+  latitude?: number;
+  longitude?: number;
   // Key is floor number (stringified), Value is array of Rooms
-  rooms: Record<string, Room[]>; 
+  rooms: Record<string, Room[]>;
 }
 
 export interface Stats {
@@ -120,6 +127,11 @@ export interface Business {
   amountDonated?: number;
   amountPledged?: number;
   nextFollowUp?: number | null;
+  // Attribution - who collected vs who entered the data
+  collectedBy?: string; // User ID of team member who collected the donation
+  enteredBy?: string;   // User ID of team member who entered the data
+  collectedByName?: string; // Display name of collector (for UI)
+  enteredByName?: string;   // Display name of data entry person (for UI)
 }
 
 export type BusinessCategory = 'corporate' | 'retail' | 'restaurant' | 'clinic' | 'office' | 'factory' | 'other';
