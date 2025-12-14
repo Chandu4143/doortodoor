@@ -20,7 +20,9 @@ import {
   Accessibility,
   Wifi,
   LogOut,
-  User
+  User,
+  Trophy,
+  Globe
 } from 'lucide-react';
 import { BusinessCampaign } from '../../types';
 import { cn } from '../../utils/cn';
@@ -32,8 +34,8 @@ interface CorporateSidebarProps {
   isOpen: boolean;
   onClose: () => void;
   onGoHome: () => void;
-  viewMode: 'dashboard' | 'campaign' | 'goals' | 'team' | 'accessibility' | 'profile';
-  setViewMode: (mode: 'dashboard' | 'campaign' | 'goals' | 'team' | 'accessibility' | 'profile') => void;
+  viewMode: 'dashboard' | 'campaign' | 'goals' | 'team' | 'accessibility' | 'leaderboard' | 'global' | 'profile';
+  setViewMode: (mode: 'dashboard' | 'campaign' | 'goals' | 'team' | 'accessibility' | 'leaderboard' | 'global' | 'profile') => void;
   selectedCampaignId: string | null;
   onSelectCampaign: (id: string | null) => void;
   campaigns: BusinessCampaign[];
@@ -173,6 +175,35 @@ export default function CorporateSidebar({
             <Target size={20} className={viewMode === 'goals' ? 'text-amber-600 dark:text-amber-400' : 'text-slate-400'} />
             Goals & Streaks
           </button>
+          <button
+            onClick={() => { setViewMode('leaderboard'); onSelectCampaign(null); }}
+            className={cn(
+              "w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-200",
+              viewMode === 'leaderboard'
+                ? "bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-400 shadow-sm"
+                : "text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-200"
+            )}
+          >
+            <Trophy size={20} className={viewMode === 'leaderboard' ? 'text-yellow-600 dark:text-yellow-400' : 'text-slate-400'} />
+            Leaderboard
+          </button>
+
+          {/* Global Dashboard (Admin Only) */}
+          {profile && ['dev', 'owner', 'bdm'].includes(profile.role) && (
+            <button
+              onClick={() => { setViewMode('global'); onSelectCampaign(null); }}
+              className={cn(
+                "w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-200",
+                viewMode === 'global'
+                  ? "bg-slate-800 text-white shadow-sm"
+                  : "text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-200"
+              )}
+            >
+              <Globe size={20} className={viewMode === 'global' ? 'text-white' : 'text-slate-400'} />
+              Global View
+            </button>
+          )}
+
           <button
             onClick={() => { setViewMode('team'); onSelectCampaign(null); }}
             className={cn(

@@ -4,7 +4,7 @@
  * Requirements: 8.3
  */
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import Layout from '../Layout';
 import CorporateSidebar from './CorporateSidebar';
 import CorporateCampaignView from './CorporateCampaignView';
@@ -16,6 +16,9 @@ import CorporateGoalTracker from './CorporateGoalTracker';
 import CorporateTeamPanel from './CorporateTeamPanel';
 import AccessibilityPanel from '../AccessibilityPanel';
 import VolunteerProfileView from '../VolunteerProfileView';
+import LeaderboardView from '../LeaderboardView';
+import GlobalDashboard from '../GlobalDashboard';
+import DailyChallengesUI from '../DailyChallengesUI';
 import { BusinessCampaign, Business } from '../../types';
 import {
   loadCampaigns, saveCampaigns, createNewCampaign, createNewBusiness,
@@ -35,10 +38,10 @@ interface CorporateAppProps {
 }
 
 export default function CorporateApp({ onGoHome }: CorporateAppProps) {
-  const { currentTeam } = useAuth();
+  const { profile } = useAuth();
   const [campaigns, setCampaigns] = useState<BusinessCampaign[]>([]);
   const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<'dashboard' | 'campaign' | 'goals' | 'team' | 'accessibility' | 'profile'>('dashboard');
+  const [viewMode, setViewMode] = useState<'dashboard' | 'campaign' | 'goals' | 'team' | 'accessibility' | 'leaderboard' | 'global' | 'profile'>('dashboard');
   const [searchQuery, setSearchQuery] = useState('');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
@@ -151,9 +154,11 @@ export default function CorporateApp({ onGoHome }: CorporateAppProps) {
           viewMode === 'dashboard' ? 'Dashboard' :
             viewMode === 'goals' ? 'Goals & Streaks' :
               viewMode === 'team' ? 'Team & Share' :
-                viewMode === 'accessibility' ? 'Accessibility' :
-                  viewMode === 'profile' ? 'My Profile' :
-                    activeCampaign?.name || 'Corporate'
+                viewMode === 'leaderboard' ? 'Leaderboard' :
+                  viewMode === 'global' ? 'Global Overview' :
+                    viewMode === 'accessibility' ? 'Accessibility' :
+                      viewMode === 'profile' ? 'My Profile' :
+                        activeCampaign?.name || 'Corporate'
         } subtitle={activeCampaign && viewMode === 'campaign' ? `${activeCampaign.area} • ${activeCampaign.businesses.length} businesses` : undefined}
         onMenuClick={() => setIsSidebarOpen(true)}
         onSettingsClick={activeCampaign && viewMode === 'campaign' ? () => setEditingCampaign(activeCampaign) : undefined}
@@ -187,24 +192,40 @@ export default function CorporateApp({ onGoHome }: CorporateAppProps) {
             <p className="text-slate-500 dark:text-slate-400 mt-1">Track your daily targets, streaks, and unlock badges.</p>
           </div>
           <div className="p-4 md:p-8 max-w-2xl mx-auto">
-            <CorporateGoalTracker campaigns={campaigns} />
+            <DailyChallengesUI />
+            <div className="mt-8">
+              <CorporateGoalTracker />
+            </div>
           </div>
         </div>
       ) : viewMode === 'team' ? (
         <div className="h-full overflow-y-auto">
           <div className="hidden md:block px-8 py-6 bg-white dark:bg-slate-900 border-b border-slate-200/60 dark:border-slate-800 sticky top-0 z-10">
             <h1 className="text-3xl font-bold text-slate-800 dark:text-slate-100 tracking-tight">Team Collaboration</h1>
-            <p className="text-slate-500 dark:text-slate-400 mt-1">Manage volunteers and share campaign data.</p>
+            <p className="text-slate-500 dark:text-slate-400 mt-1">Manage your team and share team codes.</p>
           </div>
           <div className="p-4 md:p-8 max-w-2xl mx-auto">
-            <CorporateTeamPanel
-              campaigns={campaigns}
-              onImportData={(imported) => {
-                if (confirm('This will add imported campaigns to your existing data. Continue?')) {
-                  setCampaigns(prev => [...prev, ...imported]);
-                }
-              }}
-            />
+            <CorporateTeamPanel />
+          </div>
+        </div>
+      ) : viewMode === 'leaderboard' ? (
+        <div className="h-full overflow-y-auto">
+          <div className="hidden md:block px-8 py-6 bg-white dark:bg-slate-900 border-b border-slate-200/60 dark:border-slate-800 sticky top-0 z-10">
+            <h1 className="text-3xl font-bold text-slate-800 dark:text-slate-100 tracking-tight">Leaderboard</h1>
+            <p className="text-slate-500 dark:text-slate-400 mt-1">Top performers across your team.</p>
+          </div>
+          <div className="p-4 md:p-8">
+            <LeaderboardView apartments={[]} />
+          </div>
+        </div>
+      ) : viewMode === 'global' && profile && ['dev', 'owner', 'bdm'].includes(profile.role) ? (
+        <div className="h-full overflow-y-auto">
+          <div className="hidden md:block px-8 py-6 bg-white dark:bg-slate-900 border-b border-slate-200/60 dark:border-slate-800 sticky top-0 z-10">
+            <h1 className="text-3xl font-bold text-slate-800 dark:text-slate-100 tracking-tight">Global Overview</h1>
+            <p className="text-slate-500 dark:text-slate-400 mt-1">Manage all teams across the organization.</p>
+          </div>
+          <div className="p-4 md:p-8">
+            <GlobalDashboard onInspectTeam={() => setViewMode('dashboard')} />
           </div>
         </div>
       ) : viewMode === 'accessibility' ? (

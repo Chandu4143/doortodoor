@@ -761,14 +761,12 @@ function AuthenticatedApp() {
                 viewMode === 'team' ? 'Team & Share' :
                   viewMode === 'leaderboard' ? 'Leaderboard' :
                     viewMode === 'global' ? 'Global Overview' :
-
                       viewMode === 'accessibility' ? 'Accessibility' :
                         viewMode === 'profile' ? 'My Profile' :
                           activeApartment?.name || 'DoorStep'
           }
           subtitle={activeApartment && viewMode === 'apartment' ? `${activeApartment.floors} Floors • ${activeApartment.unitsPerFloor} Units` : undefined}
           onMenuClick={() => setIsSidebarOpen(true)}
-          onBack={viewMode === 'apartment' ? () => { setSelectedApartmentId(null); setViewMode('dashboard'); } : () => setAppMode('home')}
           onSettingsClick={activeApartment && viewMode === 'apartment' ? () => setEditingApartment(activeApartment) : undefined}
           showSearch={viewMode === 'apartment' && !!activeApartment}
           searchQuery={searchQuery}
@@ -859,6 +857,18 @@ function AuthenticatedApp() {
             <div className="p-4 md:p-8 max-w-2xl mx-auto">
               <Suspense fallback={<LoadingFallback />}>
                 <AccessibilityPanel />
+              </Suspense>
+            </div>
+          </div>
+        ) : viewMode === 'profile' ? (
+          <div className="h-full overflow-y-auto">
+            <div className="hidden md:block px-8 py-6 bg-white dark:bg-slate-900 border-b border-slate-200/60 dark:border-slate-800 sticky top-0 z-10">
+              <h1 className="text-3xl font-bold text-slate-800 dark:text-slate-100 tracking-tight">My Profile</h1>
+              <p className="text-slate-500 dark:text-slate-400 mt-1">View your progress and stats.</p>
+            </div>
+            <div className="p-4 md:p-8">
+              <Suspense fallback={<LoadingFallback />}>
+                <VolunteerProfileView />
               </Suspense>
             </div>
           </div>

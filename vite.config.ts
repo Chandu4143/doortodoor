@@ -70,6 +70,8 @@ export default defineConfig(({ mode }) => {
             manualChunks: {
               // Core React bundle (must include lucide-react to avoid initialization issues)
               'vendor-react': ['react', 'react-dom', 'scheduler', 'lucide-react'],
+              // Supabase - large dependency, separate chunk
+              'vendor-supabase': ['@supabase/supabase-js'],
               // Charts - lazy loaded
               'vendor-charts': ['recharts', 'd3-shape', 'd3-scale', 'd3-path', 'd3-array', 'd3-interpolate', 'd3-color', 'd3-format', 'd3-time', 'd3-time-format'],
               // Animation library

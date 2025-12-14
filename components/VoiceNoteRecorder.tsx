@@ -1,9 +1,9 @@
 
 import React, { useState } from 'react';
 import { Mic, Square, Play, Pause, Save, Trash2, RefreshCcw } from 'lucide-react';
-import { useVoiceRecorder } from '../../hooks/useVoiceRecorder';
-import { createVoiceNote } from '../../services/supabase/voiceNotesService';
-import { cn } from '../../utils/cn';
+import { useVoiceRecorder } from '../hooks/useVoiceRecorder';
+import { createVoiceNote } from '../services/supabase/voiceNotesService';
+import { cn } from '../utils/cn';
 
 interface VoiceNoteRecorderProps {
     onSaved?: () => void;
