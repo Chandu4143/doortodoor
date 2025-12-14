@@ -313,6 +313,12 @@ function AuthenticatedApp() {
     let mounted = true;
     const unsubscribeFns: Array<() => Promise<void>> = [];
 
+    // IMPORTANT: Clear existing data immediately when team changes
+    // This prevents showing stale data from the previous team
+    setApartments([]);
+    setSelectedApartmentId(null);
+    setViewMode('dashboard');
+
     const loadSupabaseData = async () => {
       setIsLoadingFromSupabase(true);
       try {
