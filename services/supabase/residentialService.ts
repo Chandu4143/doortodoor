@@ -6,10 +6,10 @@
 
 import { supabase } from './client';
 import { calculateSupportsCount } from '../../utils/donations';
-import { 
-  subscribeToTable, 
-  unsubscribeFromTable, 
-  RealtimePayload 
+import {
+  subscribeToTable,
+  unsubscribeFromTable,
+  RealtimePayload
 } from './realtimeService';
 
 // Room status type matching database enum
@@ -26,6 +26,8 @@ export interface SupabaseApartment {
   floors: number;
   units_per_floor: number;
   target_amount: number;
+  latitude?: number;
+  longitude?: number;
   created_at: string;
   updated_at: string;
 }
@@ -62,6 +64,8 @@ export interface CreateApartmentInput {
   floors: number;
   units_per_floor: number;
   target_amount?: number;
+  latitude?: number;
+  longitude?: number;
 }
 
 // Input for updating an apartment
@@ -99,7 +103,7 @@ export async function createApartment(
 ): Promise<{ success: boolean; apartment?: SupabaseApartment; error?: string }> {
   try {
     const { data: { user } } = await supabase.auth.getUser();
-    
+
     if (!user) {
       return { success: false, error: 'Not authenticated' };
     }
@@ -123,6 +127,8 @@ export async function createApartment(
         floors: input.floors,
         units_per_floor: input.units_per_floor,
         target_amount: input.target_amount || 0,
+        latitude: input.latitude,
+        longitude: input.longitude,
       })
       .select()
       .single();
@@ -203,7 +209,7 @@ export async function updateApartment(
 ): Promise<{ success: boolean; apartment?: SupabaseApartment; error?: string }> {
   try {
     const { data: { user } } = await supabase.auth.getUser();
-    
+
     if (!user) {
       return { success: false, error: 'Not authenticated' };
     }
@@ -264,7 +270,7 @@ export async function deleteApartment(
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const { data: { user } } = await supabase.auth.getUser();
-    
+
     if (!user) {
       return { success: false, error: 'Not authenticated' };
     }
@@ -309,7 +315,7 @@ export async function createRooms(
 ): Promise<{ success: boolean; rooms?: SupabaseRoom[]; error?: string }> {
   try {
     const { data: { user } } = await supabase.auth.getUser();
-    
+
     if (!user) {
       return { success: false, error: 'Not authenticated' };
     }
@@ -441,7 +447,7 @@ export async function updateRoom(
 ): Promise<{ success: boolean; room?: SupabaseRoom; error?: string }> {
   try {
     const { data: { user } } = await supabase.auth.getUser();
-    
+
     if (!user) {
       return { success: false, error: 'Not authenticated' };
     }
@@ -532,7 +538,7 @@ export async function deleteRoom(
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const { data: { user } } = await supabase.auth.getUser();
-    
+
     if (!user) {
       return { success: false, error: 'Not authenticated' };
     }

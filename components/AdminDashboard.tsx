@@ -20,6 +20,7 @@ import {
   type RoleRequest
 } from '../services/supabase/roleRequestService';
 import { createAnnouncement } from '../services/supabase/announcementService';
+import TeamCodeShare from './team/TeamCodeShare';
 import { cn } from '../utils/cn';
 
 interface AdminDashboardProps {
@@ -43,6 +44,7 @@ export default function AdminDashboard({
   const [announcementText, setAnnouncementText] = useState('');
   const [isPosting, setIsPosting] = useState(false);
   const [showAnnouncementInput, setShowAnnouncementInput] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
 
   // Load pending requests if user is dev or owner
   useEffect(() => {
@@ -402,14 +404,20 @@ export default function AdminDashboard({
               <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Corporate</span>
             </button>
 
-            <button className="flex flex-col items-center gap-2 p-4 bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700 hover:border-purple-300 dark:hover:border-purple-700 hover:shadow-md transition-all">
+            <button
+              onClick={() => setShowShareModal(true)}
+              className="flex flex-col items-center gap-2 p-4 bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700 hover:border-purple-300 dark:hover:border-purple-700 hover:shadow-md transition-all"
+            >
               <div className="w-10 h-10 bg-purple-100 dark:bg-purple-900/30 rounded-xl flex items-center justify-center">
                 <UserPlus size={20} className="text-purple-600 dark:text-purple-400" />
               </div>
               <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Add Member</span>
             </button>
 
-            <button className="flex flex-col items-center gap-2 p-4 bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700 hover:border-amber-300 dark:hover:border-amber-700 hover:shadow-md transition-all">
+            <button
+              onClick={() => setShowShareModal(true)}
+              className="flex flex-col items-center gap-2 p-4 bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700 hover:border-amber-300 dark:hover:border-amber-700 hover:shadow-md transition-all"
+            >
               <div className="w-10 h-10 bg-amber-100 dark:bg-amber-900/30 rounded-xl flex items-center justify-center">
                 <Share2 size={20} className="text-amber-600 dark:text-amber-400" />
               </div>
@@ -570,6 +578,15 @@ export default function AdminDashboard({
           )}
         </motion.div>
       </div>
+
+      {/* Share Code Modal */}
+      {currentTeam && (
+        <TeamCodeShare
+          isOpen={showShareModal}
+          onClose={() => setShowShareModal(false)}
+          team={currentTeam}
+        />
+      )}
     </div>
   );
 }

@@ -1,14 +1,15 @@
 import React, { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Trophy, Medal, Award, TrendingUp, Users, Target, ArrowUp, Star } from 'lucide-react';
+import { Trophy, Medal, Award, TrendingUp, Users, Target, ArrowUp, Star, Zap } from 'lucide-react';
 import { Apartment, Room } from '../types';
 import { cn } from '../utils/cn';
+import { getLeaderboard } from '../services/supabase/gamificationService';
 
 interface LeaderboardViewProps {
     apartments: Apartment[];
 }
 
-type LeaderboardMetric = 'raised' | 'doors' | 'donations';
+type LeaderboardMetric = 'raised' | 'doors' | 'donations' | 'xp';
 
 interface MemberStats {
     id: string; // collectedBy
@@ -17,10 +18,32 @@ interface MemberStats {
     doorsKnocked: number;
     donationCount: number;
     lastActive: number;
+    xp?: number;
+    level?: number;
 }
 
 export default function LeaderboardView({ apartments }: LeaderboardViewProps) {
     const [metric, setMetric] = useState<LeaderboardMetric>('raised');
+    const [xpLeaderboard, setXpLeaderboard] = useState<MemberStats[]>([]);
+
+    React.useEffect(() => {
+        if (metric === 'xp' && xpLeaderboard.length === 0) {
+            getLeaderboard().then(res => {
+                if (res.success && res.leaderboard) {
+                    setXpLeaderboard(res.leaderboard.map(l => ({
+                        id: l.id,
+                        name: l.name,
+                        totalRaised: 0,
+                        doorsKnocked: 0,
+                        donationCount: 0,
+                        lastActive: 0,
+                        xp: l.xp,
+                        level: l.level
+                    })));
+                }
+            });
+        }
+    }, [metric]);
 
     // Calculate stats from apartments data
     const stats = useMemo(() => {
@@ -67,13 +90,15 @@ export default function LeaderboardView({ apartments }: LeaderboardViewProps) {
 
     // Sort based on current metric
     const sortedStats = useMemo(() => {
+        if (metric === 'xp') return xpLeaderboard;
+
         return [...stats].sort((a, b) => {
             if (metric === 'raised') return b.totalRaised - a.totalRaised;
             if (metric === 'doors') return b.doorsKnocked - a.doorsKnocked;
             if (metric === 'donations') return b.donationCount - a.donationCount;
             return 0;
         });
-    }, [stats, metric]);
+    }, [stats, metric, xpLeaderboard]);
 
     const top3 = sortedStats.slice(0, 3);
     const rest = sortedStats.slice(3);
@@ -82,12 +107,14 @@ export default function LeaderboardView({ apartments }: LeaderboardViewProps) {
         if (metric === 'raised') return `₹${stat.totalRaised.toLocaleString()}`;
         if (metric === 'doors') return `${stat.doorsKnocked} Doors`;
         if (metric === 'donations') return `${stat.donationCount} Donations`;
+        if (metric === 'xp') return `${stat.xp} XP (Lvl ${stat.level})`;
     };
 
     const getMetricIcon = () => {
         if (metric === 'raised') return <TrendingUp size={16} />;
         if (metric === 'doors') return <Users size={16} />;
         if (metric === 'donations') return <Target size={16} />;
+        if (metric === 'xp') return <Zap size={16} />;
     };
 
     return (
@@ -108,8 +135,10 @@ export default function LeaderboardView({ apartments }: LeaderboardViewProps) {
                 <div className="bg-slate-100 dark:bg-slate-800 p-1.5 rounded-xl flex gap-1">
                     {[
                         { id: 'raised', label: 'Total Raised', icon: TrendingUp },
+                        { id: 'raised', label: 'Total Raised', icon: TrendingUp },
                         { id: 'doors', label: 'Doors Knocked', icon: Users },
                         { id: 'donations', label: 'Donations', icon: Target },
+                        { id: 'xp', label: 'XP Level', icon: Zap },
                     ].map((tab) => (
                         <button
                             key={tab.id}

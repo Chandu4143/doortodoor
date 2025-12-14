@@ -15,15 +15,16 @@ import Modal from '../ui/Modal';
 import CorporateGoalTracker from './CorporateGoalTracker';
 import CorporateTeamPanel from './CorporateTeamPanel';
 import AccessibilityPanel from '../AccessibilityPanel';
+import VolunteerProfileView from '../VolunteerProfileView';
 import { BusinessCampaign, Business } from '../../types';
 import {
   loadCampaigns, saveCampaigns, createNewCampaign, createNewBusiness,
   addBusinessToCampaign, updateBusinessInCampaign, deleteBusinessFromCampaign,
-  updateCampaign, exportCorporateToCSV, validateAndParseCorporateImport
+  updateCampaign, exportCorporateToCSV
 } from '../../services/corporateStorageService';
 import { initAccessibility } from '../../services/accessibilityService';
 import { useAuth } from '../../contexts/AuthContext';
-import { 
+import {
   onConnectionStateChange,
   type ConnectionState
 } from '../../services/supabase/realtimeService';
@@ -37,10 +38,10 @@ export default function CorporateApp({ onGoHome }: CorporateAppProps) {
   const { currentTeam } = useAuth();
   const [campaigns, setCampaigns] = useState<BusinessCampaign[]>([]);
   const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<'dashboard' | 'campaign' | 'goals' | 'team' | 'accessibility'>('dashboard');
+  const [viewMode, setViewMode] = useState<'dashboard' | 'campaign' | 'goals' | 'team' | 'accessibility' | 'profile'>('dashboard');
   const [searchQuery, setSearchQuery] = useState('');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [showDataModal, setShowDataModal] = useState(false);
+
   const [editingBusiness, setEditingBusiness] = useState<{ businessId: string; campaignId: string } | null>(null);
   const [showAddBusiness, setShowAddBusiness] = useState(false);
   const [editingCampaign, setEditingCampaign] = useState<BusinessCampaign | null>(null);
@@ -76,12 +77,12 @@ export default function CorporateApp({ onGoHome }: CorporateAppProps) {
     setCampaigns(loadCampaigns());
     initAccessibility();
     if (window.innerWidth >= 768) setIsSidebarOpen(true);
-    
+
     // Listen for connection state changes
     const unsubscribe = onConnectionStateChange((state) => {
       setConnectionState(state);
     });
-    
+
     return () => unsubscribe();
   }, []);
 
@@ -127,21 +128,6 @@ export default function CorporateApp({ onGoHome }: CorporateAppProps) {
     }
   };
 
-  const handleImportData = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    try {
-      if (!confirm("This will OVERWRITE your current data. Are you sure?")) return;
-      const importedData = await validateAndParseCorporateImport(file);
-      setCampaigns(importedData);
-      saveCampaigns(importedData);
-      alert("Data restored successfully!");
-      setShowDataModal(false);
-    } catch (err: any) {
-      alert("Import failed: " + err.message);
-    }
-  };
-
   const activeCampaign = useMemo(() => campaigns.find(c => c.id === selectedCampaignId), [campaigns, selectedCampaignId]);
   const activeBusiness = useMemo(() => {
     if (!activeCampaign || !editingBusiness) return null;
@@ -155,25 +141,25 @@ export default function CorporateApp({ onGoHome }: CorporateAppProps) {
           viewMode={viewMode} setViewMode={setViewMode} selectedCampaignId={selectedCampaignId}
           onSelectCampaign={(id) => { setSelectedCampaignId(id); if (id) { setViewMode('campaign'); if (window.innerWidth < 768) setIsSidebarOpen(false); } }}
           campaigns={campaigns} onCreateCampaign={handleCreateCampaign} onDeleteCampaign={handleDeleteCampaign}
-          onExportCSV={() => exportCorporateToCSV(campaigns)} onOpenRestoration={() => setShowDataModal(true)}
+          onExportCSV={() => exportCorporateToCSV(campaigns)}
           connectionState={connectionState}
         />
       }
     >
       <MobileHeader
         title={
-          viewMode === 'dashboard' ? 'Corporate Dashboard' : 
-          viewMode === 'goals' ? 'Goals & Streaks' :
-          viewMode === 'team' ? 'Team & Share' :
-          viewMode === 'accessibility' ? 'Accessibility' :
-          activeCampaign?.name || 'Corporate'
-        }
-        subtitle={activeCampaign && viewMode === 'campaign' ? `${activeCampaign.area} • ${activeCampaign.businesses.length} businesses` : undefined}
+          viewMode === 'dashboard' ? 'Dashboard' :
+            viewMode === 'goals' ? 'Goals & Streaks' :
+              viewMode === 'team' ? 'Team & Share' :
+                viewMode === 'accessibility' ? 'Accessibility' :
+                  viewMode === 'profile' ? 'My Profile' :
+                    activeCampaign?.name || 'Corporate'
+        } subtitle={activeCampaign && viewMode === 'campaign' ? `${activeCampaign.area} • ${activeCampaign.businesses.length} businesses` : undefined}
         onMenuClick={() => setIsSidebarOpen(true)}
         onSettingsClick={activeCampaign && viewMode === 'campaign' ? () => setEditingCampaign(activeCampaign) : undefined}
         showSearch={viewMode === 'campaign' && !!activeCampaign}
         searchQuery={searchQuery} onSearchChange={setSearchQuery} onSearchClear={() => setSearchQuery('')}
-        timeFilter="all" onTimeFilterChange={() => {}}
+        timeFilter="all" onTimeFilterChange={() => { }}
       />
 
       {viewMode === 'dashboard' ? (
@@ -183,13 +169,14 @@ export default function CorporateApp({ onGoHome }: CorporateAppProps) {
             <p className="text-slate-500 dark:text-slate-400 mt-1">Track business visits and corporate donations.</p>
           </div>
           <div className="p-4 md:p-8">
-            <CorporateDashboard 
-              campaigns={campaigns} 
+            <CorporateDashboard
+              campaigns={campaigns}
               onBusinessClick={(bizId, campId) => {
                 setSelectedCampaignId(campId);
                 setViewMode('campaign');
                 setEditingBusiness({ businessId: bizId, campaignId: campId });
               }}
+              onCreateCampaign={() => setIsSidebarOpen(true)}
             />
           </div>
         </div>
@@ -210,8 +197,8 @@ export default function CorporateApp({ onGoHome }: CorporateAppProps) {
             <p className="text-slate-500 dark:text-slate-400 mt-1">Manage volunteers and share campaign data.</p>
           </div>
           <div className="p-4 md:p-8 max-w-2xl mx-auto">
-            <CorporateTeamPanel 
-              campaigns={campaigns} 
+            <CorporateTeamPanel
+              campaigns={campaigns}
               onImportData={(imported) => {
                 if (confirm('This will add imported campaigns to your existing data. Continue?')) {
                   setCampaigns(prev => [...prev, ...imported]);
@@ -230,6 +217,8 @@ export default function CorporateApp({ onGoHome }: CorporateAppProps) {
             <AccessibilityPanel />
           </div>
         </div>
+      ) : viewMode === 'profile' ? (
+        <VolunteerProfileView />
       ) : activeCampaign ? (
         <CorporateCampaignView campaign={activeCampaign} searchQuery={searchQuery} setSearchQuery={setSearchQuery}
           onEditCampaign={() => setEditingCampaign(activeCampaign)}
@@ -240,7 +229,7 @@ export default function CorporateApp({ onGoHome }: CorporateAppProps) {
         <div className="h-full flex items-center justify-center p-8 bg-slate-50/50 dark:bg-slate-950/50">
           <div className="text-center max-w-sm">
             <div className="w-20 h-20 bg-white dark:bg-slate-800 shadow-lg rounded-3xl flex items-center justify-center mx-auto mb-6 text-slate-300 dark:text-slate-600">
-              <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect width="16" height="20" x="4" y="2" rx="2"/><path d="M9 22v-4h6v4"/><path d="M8 6h.01"/><path d="M16 6h.01"/><path d="M12 6h.01"/><path d="M12 10h.01"/><path d="M12 14h.01"/><path d="M16 10h.01"/><path d="M16 14h.01"/><path d="M8 10h.01"/><path d="M8 14h.01"/></svg>
+              <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect width="16" height="20" x="4" y="2" rx="2" /><path d="M9 22v-4h6v4" /><path d="M8 6h.01" /><path d="M16 6h.01" /><path d="M12 6h.01" /><path d="M12 10h.01" /><path d="M12 14h.01" /><path d="M16 10h.01" /><path d="M16 14h.01" /><path d="M8 10h.01" /><path d="M8 14h.01" /></svg>
             </div>
             <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100 mb-2">No Campaign Selected</h3>
             <p className="text-slate-500 dark:text-slate-400 mb-8">Choose a campaign from the sidebar or create a new one.</p>
@@ -261,25 +250,9 @@ export default function CorporateApp({ onGoHome }: CorporateAppProps) {
       {/* Add Business Modal */}
       {showAddBusiness && (
         <BusinessModal business={null} isOpen={showAddBusiness} onClose={() => setShowAddBusiness(false)}
-          onSave={() => {}} isNew onCreateNew={handleAddBusiness}
+          onSave={() => { }} isNew onCreateNew={handleAddBusiness}
         />
       )}
-
-      {/* Restore Data Modal */}
-      <Modal isOpen={showDataModal} onClose={() => setShowDataModal(false)} title="Backup & Restore">
-        <div className="space-y-4">
-          <p className="text-sm text-slate-600 dark:text-slate-300">
-            Safeguard your corporate data by exporting it regularly.
-          </p>
-          <label className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer transition-colors group">
-            <input type="file" className="hidden" accept=".json" onChange={handleImportData} />
-            <div className="w-10 h-10 bg-blue-50 dark:bg-blue-900/20 text-blue-500 rounded-full flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
-              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
-            </div>
-            <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Restore from File</span>
-          </label>
-        </div>
-      </Modal>
 
       {/* Edit Campaign Modal */}
       {editingCampaign && (

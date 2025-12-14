@@ -5,13 +5,32 @@ import {
     Search,
     X,
     Calendar,
-    Clock
+    Clock,
+    Target,
+    AlertTriangle
 } from 'lucide-react';
 import { Apartment, Room, RoomStatus } from '../types';
 import { STATUS_CONFIG } from '../constants';
 import { cn } from '../utils/cn';
 import SwipeableRoomCard from './SwipeableRoomCard';
 import FloorProgress from './FloorProgress';
+import {
+    getOptimalStartFloor,
+    getSkipSuggestions,
+    type FloorSuggestion
+} from '../services/supabase/routePlanningService';
+import {
+    claimFloor,
+    releaseFloor,
+    getClaimsForApartment as getFloorClaims,
+    subscribeToClaims as subscribeToFloorClaims,
+    type FloorClaim
+} from '../services/supabase/floorClaimService';
+import { supabase } from '../services/supabase/client';
+import HelpRequestModal from './HelpRequestModal';
+import { useAuth } from '../contexts/AuthContext';
+import { useShake } from '../hooks/useShake';
+import UndoToast from './UndoToast';
 
 interface ApartmentViewProps {
     apartment: Apartment;
@@ -40,15 +59,156 @@ export default function ApartmentView({
     onQuickStatusChange,
     onDonation
 }: ApartmentViewProps) {
-    
-    // Wrap quick status change to trigger celebration
+
+    // Wrap quick status change to track history
     const handleQuickStatusChange = (roomId: string, floor: string, status: RoomStatus) => {
+        // Find previous status (needed for undo) - this requires looking up the room
+        // Since we don't have direct access to "previous" without strict state tracking, 
+        // we might only support undoing if we know the previous state. 
+        // For now, let's assume 'unvisited' as default rollback or try to find it.
+        // Better approach: Pass previous status from the UI component calling this or look it up in `apartment`.
+
+        // Lookup current status before change
+        const currentRoom = apartment.rooms[floor]?.find(r => r.id === roomId);
+        if (currentRoom) {
+            setLastAction({
+                roomId,
+                floor,
+                previousStatus: currentRoom.status
+            });
+        }
+
         if (onQuickStatusChange) {
             onQuickStatusChange(roomId, floor, status);
             // Trigger confetti for donations
             if (status === 'donated' && onDonation) {
                 onDonation();
             }
+        }
+    };
+
+    // --- Volunteer Engagement State ---
+    const [routeSuggestion, setRouteSuggestion] = React.useState<FloorSuggestion | null>(null);
+    const [skipFloors, setSkipFloors] = React.useState<number[]>([]);
+    const [floorClaims, setFloorClaims] = React.useState<FloorClaim[]>([]);
+    const [currentUserId, setCurrentUserId] = React.useState<string | null>(null);
+    const [isLoadingRoute, setIsLoadingRoute] = React.useState(false);
+    const [showHelpModal, setShowHelpModal] = React.useState(false);
+    const { currentTeam } = useAuth();
+
+    // --- Shake to Undo State ---
+    const [showUndoToast, setShowUndoToast] = React.useState(false);
+    const [lastAction, setLastAction] = React.useState<{ roomId: string, floor: string, previousStatus: RoomStatus } | null>(null);
+
+    // Handle Shake
+    useShake(() => {
+        if (lastAction) {
+            setShowUndoToast(true);
+            if (navigator.vibrate) navigator.vibrate(200);
+        }
+    });
+
+    const handleUndo = () => {
+        if (lastAction && onQuickStatusChange) {
+            onQuickStatusChange(lastAction.roomId, lastAction.floor, lastAction.previousStatus);
+            setShowUndoToast(false);
+            setLastAction(null);
+            // alert('Undone!'); // Optional feedback
+        }
+    };
+
+
+    // Fetch user ID
+    React.useEffect(() => {
+        supabase.auth.getUser().then(({ data }) => {
+            setCurrentUserId(data.user?.id || null);
+        });
+    }, []);
+
+    // Load Route Suggestions & Claims
+    React.useEffect(() => {
+        if (!apartment.id) return;
+
+        const loadData = async () => {
+            setIsLoadingRoute(true);
+            try {
+                // Parallel fetch
+                const [startFloorRes, skipsRes, claimsRes] = await Promise.all([
+                    getOptimalStartFloor(apartment.id),
+                    getSkipSuggestions(apartment.id),
+                    getFloorClaims(apartment.id)
+                ]);
+
+                if (startFloorRes.success && startFloorRes.suggestion) {
+                    setRouteSuggestion(startFloorRes.suggestion);
+                }
+                if (skipsRes.success && skipsRes.suggestions) {
+                    setSkipFloors(skipsRes.suggestions.map(s => s.floor));
+                }
+                if (claimsRes.success && claimsRes.claims) {
+                    setFloorClaims(claimsRes.claims);
+                }
+            } catch (e) {
+                console.error("Failed to load engagement data", e);
+            } finally {
+                setIsLoadingRoute(false);
+            }
+        };
+
+        loadData();
+
+        // Subscribe to claims
+        const unsubscribe = subscribeToFloorClaims(apartment.id, (payload) => {
+            // Refresh claims on any change for simplicity
+            getFloorClaims(apartment.id).then(res => {
+                if (res.success && res.claims) setFloorClaims(res.claims);
+            });
+        });
+
+        return () => {
+            unsubscribe();
+        };
+    }, [apartment.id]);
+
+    const handleClaimFloor = async (floor: number) => {
+        if (!currentUserId) return;
+
+        // Optimistic update
+        const tempClaim: FloorClaim = {
+            id: 'temp',
+            apartment_id: apartment.id,
+            floor,
+            user_id: currentUserId,
+            claimed_at: new Date().toISOString(),
+            last_activity_at: new Date().toISOString()
+        };
+        setFloorClaims(prev => [...prev, tempClaim]);
+
+        try {
+            await claimFloor({ apartmentId: apartment.id, floor });
+            // Real refresh happens via subscription
+        } catch (e) {
+            console.error(e);
+            // Revert on error
+            setFloorClaims(prev => prev.filter(c => c.id !== 'temp'));
+            alert("Failed to claim floor. It might be taken.");
+        }
+    };
+
+    const handleReleaseFloor = async (floor: number) => {
+        const claim = floorClaims.find(c => c.floor === floor && c.user_id === currentUserId);
+        if (!claim) return;
+
+        // Optimistic
+        setFloorClaims(prev => prev.filter(c => c.floor !== floor));
+
+        try {
+            await releaseFloor({ apartmentId: apartment.id, floor });
+        } catch (e) {
+            console.error(e);
+            getFloorClaims(apartment.id).then(res => {
+                if (res.success && res.claims) setFloorClaims(res.claims);
+            }); // Revert
         }
     };
 
@@ -188,6 +348,31 @@ export default function ApartmentView({
 
             <div className="flex-1 flex flex-col md:flex-row overflow-hidden relative">
 
+                {/* Engagement Banner: Route Suggestion */}
+                {routeSuggestion && !isFiltered && (
+                    <div className="md:hidden bg-indigo-50 dark:bg-indigo-900/20 px-4 py-3 border-b border-indigo-100 dark:border-indigo-800 flex items-start gap-3">
+                        <div className="p-2 bg-indigo-100 dark:bg-indigo-900/50 rounded-lg text-indigo-600 dark:text-indigo-400 shrink-0">
+                            <Target size={18} />
+                        </div>
+                        <div>
+                            <p className="text-sm font-bold text-indigo-900 dark:text-indigo-200">
+                                Suggested Start: Floor {routeSuggestion.floor}
+                            </p>
+                            <p className="text-xs text-indigo-700 dark:text-indigo-300 mt-0.5">
+                                {routeSuggestion.reason}
+                            </p>
+                            {selectedFloor !== String(routeSuggestion.floor) && (
+                                <button
+                                    onClick={() => setSelectedFloor(String(routeSuggestion.floor))}
+                                    className="mt-2 text-xs font-bold bg-indigo-600 text-white px-3 py-1.5 rounded-lg shadow-sm active:scale-95 transition-transform"
+                                >
+                                    Go to Floor {routeSuggestion.floor}
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                )}
+
                 {/* Responsive Floor Selector (Hidden if searching) */}
                 {/* Floor Selector with scroll indicators */}
                 <div className={cn(
@@ -198,7 +383,7 @@ export default function ApartmentView({
                     {/* Scroll fade indicators for mobile */}
                     <div className="md:hidden absolute left-0 top-0 bottom-0 w-6 bg-gradient-to-r from-white dark:from-slate-900 to-transparent pointer-events-none z-10" />
                     <div className="md:hidden absolute right-0 top-0 bottom-0 w-6 bg-gradient-to-l from-white dark:from-slate-900 to-transparent pointer-events-none z-10" />
-                    
+
                     <div className="flex md:flex-col items-center overflow-x-auto md:overflow-y-auto gap-2 p-2 md:py-6 no-scrollbar w-full">
                         <span className="hidden md:block text-[10px] font-bold text-slate-400 uppercase mb-2 tracking-wider">Floor</span>
 
@@ -215,6 +400,7 @@ export default function ApartmentView({
                         </button>
                         <div className="hidden md:block w-8 h-px bg-slate-100 dark:bg-slate-800 my-2"></div>
                         <div className="md:hidden h-6 w-px bg-slate-200 dark:bg-slate-800 mx-1"></div>
+
 
                         {sortedFloors.map(floor => (
                             <button
@@ -263,11 +449,59 @@ export default function ApartmentView({
                             <div key={floor} className="mb-8 animate-in slide-in-from-bottom duration-500">
                                 {/* Floor Progress Bar */}
                                 <div className="mb-4">
-                                    <FloorProgress 
-                                        floor={floor} 
+                                    <FloorProgress
+                                        floor={floor}
                                         rooms={floorRooms}
                                         onNextUnvisited={(roomId) => onRoomClick(roomId, floor, apartment.id)}
                                     />
+                                </div>
+
+                                {/* Floor Claiming UI */}
+                                <div className="mb-4 px-1 flex items-center justify-between">
+                                    {(() => {
+                                        const floorNum = Number(floor);
+                                        const claim = floorClaims.find(c => c.floor === floorNum);
+                                        const isMyClaim = claim?.user_id === currentUserId;
+                                        const isSkipped = skipFloors.includes(floorNum);
+
+                                        if (claim) {
+                                            return (
+                                                <div className={cn(
+                                                    "text-xs font-bold px-3 py-1.5 rounded-full flex items-center gap-2 border",
+                                                    isMyClaim
+                                                        ? "bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-900/20 dark:border-emerald-800 dark:text-emerald-400"
+                                                        : "bg-amber-50 border-amber-200 text-amber-700 dark:bg-amber-900/20 dark:border-amber-800 dark:text-amber-400"
+                                                )}>
+                                                    <div className={cn("w-2 h-2 rounded-full animate-pulse", isMyClaim ? "bg-emerald-500" : "bg-amber-500")} />
+                                                    {isMyClaim ? "You are working on this floor" : "Another volunteer is here"}
+                                                    {isMyClaim && (
+                                                        <button
+                                                            onClick={() => handleReleaseFloor(floorNum)}
+                                                            className="ml-2 underline hover:no-underline opacity-80"
+                                                        >
+                                                            Done
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            );
+                                        }
+
+                                        return (
+                                            <div className="flex items-center gap-2">
+                                                <button
+                                                    onClick={() => handleClaimFloor(floorNum)}
+                                                    className="text-xs font-bold px-3 py-1.5 bg-slate-100 hover:bg-blue-50 text-slate-600 hover:text-blue-600 border border-slate-200 hover:border-blue-200 rounded-full transition-colors dark:bg-slate-800 dark:border-slate-700 dark:text-slate-400 dark:hover:text-blue-400"
+                                                >
+                                                    Claim Floor
+                                                </button>
+                                                {isSkipped && (
+                                                    <span className="text-[10px] font-medium text-amber-600 bg-amber-50 border border-amber-100 px-2 py-1 rounded-full">
+                                                        High Skip Rate
+                                                    </span>
+                                                )}
+                                            </div>
+                                        );
+                                    })()}
                                 </div>
 
                                 <div className="flex items-center gap-4 mb-4 sticky top-0 md:relative z-10 py-2 md:py-0 pl-1 md:pl-0">
@@ -394,6 +628,33 @@ export default function ApartmentView({
 
                     <div className="h-20 md:h-10"></div>
                 </div>
+            </div>
+            {/* Undo Toast */}
+            <UndoToast
+                isVisible={showUndoToast}
+                onUndo={handleUndo}
+                onDismiss={() => setShowUndoToast(false)}
+            />
+
+            {/* Help Request Modal */}
+            {currentTeam && (
+                <HelpRequestModal
+                    isOpen={showHelpModal}
+                    onClose={() => setShowHelpModal(false)}
+                    teamId={currentTeam.id}
+                    buildingName={apartment.name}
+                />
+            )}
+
+            {/* Quick Actions FAB */}
+            <div className="fixed bottom-6 right-6 flex flex-col gap-3 z-30">
+                <button
+                    onClick={() => setShowHelpModal(true)}
+                    className="p-4 bg-red-600 text-white rounded-full shadow-lg shadow-red-200 dark:shadow-red-900/30 hover:bg-red-700 transition-transform hover:scale-105 active:scale-95"
+                    title="Request Help"
+                >
+                    <AlertTriangle className="w-6 h-6" />
+                </button>
             </div>
         </div>
     );

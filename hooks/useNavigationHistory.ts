@@ -7,7 +7,7 @@ import { useEffect, useCallback, useRef } from 'react';
 
 export interface NavigationState {
   appMode: 'home' | 'residential' | 'corporate';
-  viewMode?: 'dashboard' | 'apartment' | 'goals' | 'team' | 'accessibility';
+  viewMode?: 'dashboard' | 'apartment' | 'goals' | 'team' | 'accessibility' | 'leaderboard' | 'global' | 'profile';
   apartmentId?: string | null;
 }
 
@@ -27,10 +27,10 @@ export function useNavigationHistory({ state, onNavigate }: UseNavigationHistory
   // Push state to history when navigation changes
   const pushState = useCallback((newState: NavigationState) => {
     isProgrammaticNavigation.current = true;
-    
+
     // Create a unique key for this state
     const stateKey = `${newState.appMode}-${newState.viewMode || ''}-${newState.apartmentId || ''}`;
-    
+
     // Only push if different from current
     const currentStateKey = window.history.state?.stateKey;
     if (currentStateKey !== stateKey) {
@@ -40,7 +40,7 @@ export function useNavigationHistory({ state, onNavigate }: UseNavigationHistory
         window.location.pathname
       );
     }
-    
+
     isProgrammaticNavigation.current = false;
   }, []);
 
@@ -48,9 +48,9 @@ export function useNavigationHistory({ state, onNavigate }: UseNavigationHistory
   useEffect(() => {
     const handlePopState = (event: PopStateEvent) => {
       if (isProgrammaticNavigation.current) return;
-      
+
       const historyState = event.state as NavigationState | null;
-      
+
       if (historyState) {
         // Navigate to the state from history
         onNavigate(historyState);

@@ -35,7 +35,10 @@ const TeamPanel = lazy(() => import('./components/TeamPanel'));
 const AccessibilityPanel = lazy(() => import('./components/AccessibilityPanel'));
 const LeaderboardView = lazy(() => import('./components/LeaderboardView'));
 const GlobalDashboard = lazy(() => import('./components/GlobalDashboard'));
-const MigrationPrompt = lazy(() => import('./components/migration/MigrationPrompt'));
+const DailyChallengesUI = React.lazy(() => import('./components/DailyChallengesUI'));
+const VolunteerProfileView = React.lazy(() => import('./components/VolunteerProfileView'));
+const MilestoneCelebration = React.lazy(() => import('./components/MilestoneCelebration'));
+
 
 // Loading fallback
 const LoadingFallback = () => (
@@ -135,8 +138,7 @@ import {
   createNewApartment,
   updateRoomInApartment,
   resizeApartment,
-  exportToCSV,
-  validateAndParseImport
+  exportToCSV
 } from './services/storageService';
 import { loadCampaigns } from './services/corporateStorageService';
 import { initAccessibility } from './services/accessibilityService';
@@ -230,8 +232,13 @@ function AuthenticatedApp() {
   // --- Residential State ---
   const [apartments, setApartments] = useState<Apartment[]>([]);
   const [selectedApartmentId, setSelectedApartmentId] = useState<string | null>(null);
+
   const [selectedFloor, setSelectedFloor] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<'dashboard' | 'apartment' | 'goals' | 'team' | 'accessibility' | 'leaderboard' | 'global'>('dashboard');
+  const [viewMode, setViewMode] = useState<'dashboard' | 'apartment' | 'goals' | 'team' | 'accessibility' | 'leaderboard' | 'global' | 'profile'>('dashboard');
+
+  // --- Milestone State ---
+  const [showMilestone, setShowMilestone] = useState<{ type: 'level_up' | 'achievement', title: string, description: string, level?: number } | null>(null);
+  const previousLevelRef = useRef<number | null>(null);
 
   // --- Browser History Navigation ---
   // This enables the back button to navigate within the app instead of closing it
@@ -265,7 +272,6 @@ function AuthenticatedApp() {
 
   // UI State
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [showDataModal, setShowDataModal] = useState(false);
   const [editingRoom, setEditingRoom] = useState<{ roomId: string, floor: string, apartmentId: string } | null>(null);
   const [editingApartment, setEditingApartment] = useState<Apartment | null>(null);
 
@@ -281,7 +287,7 @@ function AuthenticatedApp() {
 
   // --- Effects ---
 
-  // Initialize app and load data
+  // Initialize app (no localStorage loading - we use Supabase as source of truth)
   useEffect(() => {
     initAccessibility(); // Initialize accessibility settings
     initializeSyncHandlers(); // Register sync handlers
@@ -291,8 +297,8 @@ function AuthenticatedApp() {
       setIsSidebarOpen(true);
     }
 
-    // Load from localStorage initially (fallback/offline support)
-    setApartments(loadApartments());
+    // Don't load from localStorage - Supabase is the source of truth
+    // localStorage is only used for offline queue, not as primary data store
 
     return () => {
       cleanupConnection();
@@ -324,13 +330,14 @@ function AuthenticatedApp() {
             }
           }
 
-          if (mounted && apartmentsWithRooms.length > 0) {
+          if (mounted) {
+            // Always set apartments from Supabase (even if empty) - this is the source of truth
             setApartments(apartmentsWithRooms);
           }
         }
       } catch (err) {
         console.error('Error loading from Supabase:', err);
-        // Keep localStorage data as fallback
+        // On error, keep current state (don't clear)
       } finally {
         if (mounted) {
           setIsLoadingFromSupabase(false);
@@ -432,21 +439,40 @@ function AuthenticatedApp() {
   }, [selectedApartmentId]);
 
   // --- Actions ---
-  const handleCreateApartment = (name: string, floors: number, units: number, target: number) => {
-    const newApt = createNewApartment(name, floors, units, target);
-    setApartments(prev => [newApt, ...prev]);
-    setSelectedApartmentId(newApt.id);
-    setViewMode('apartment');
-    if (window.innerWidth < 768) setIsSidebarOpen(false);
+  const handleCreateApartment = async (name: string, floors: number, units: number, target: number) => {
+    if (!currentTeam) {
+      alert('Please select a team first');
+      return;
+    }
 
-    // Sync to Supabase
-    if (currentTeam) {
-      syncCreateApartment(currentTeam.id, {
+    // Create directly in Supabase - it will trigger real-time update to add to state
+    try {
+      const result = await syncCreateApartment(currentTeam.id, {
         name,
         floors,
         units_per_floor: units,
         target_amount: target
       });
+
+      if (result.success) {
+        if ('apartment' in result && result.apartment) {
+          // Online success - the real-time subscription will add it to state
+          // but we can also set selection immediately for better UX
+          setSelectedApartmentId(result.apartment.id);
+          setViewMode('apartment');
+          if (window.innerWidth < 768) setIsSidebarOpen(false);
+        } else if ('queued' in result && result.queued) {
+          // Offline - create local placeholder
+          const tempApt = createNewApartment(name, floors, units, target);
+          setApartments(prev => [tempApt, ...prev]);
+          setSelectedApartmentId(tempApt.id);
+          setViewMode('apartment');
+          if (window.innerWidth < 768) setIsSidebarOpen(false);
+        }
+      }
+    } catch (err) {
+      console.error('Error creating apartment:', err);
+      alert('Failed to create campaign. Please try again.');
     }
   };
 
@@ -479,7 +505,6 @@ function AuthenticatedApp() {
     );
     setApartments(updatedApts);
     setEditingRoom(null);
-    setShowDataModal(false);
 
     // Trigger confetti for donations!
     if (isNewDonation) {
@@ -498,23 +523,17 @@ function AuthenticatedApp() {
     setViewMode('apartment');
   }, []);
 
-  const handleImportData = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    try {
-      if (!confirm("This will OVERWRITE your current data with the backup file. Are you sure?")) {
-        return;
-      }
-      const importedData = await validateAndParseImport(file);
-      setApartments(importedData);
-      saveApartments(importedData);
-      alert("Data restored successfully!");
-      setShowDataModal(false);
-    } catch (err: any) {
-      alert("Import failed: " + err.message);
+  // Back Navigation Handler
+  const handleBack = useCallback(() => {
+    if (viewMode === 'apartment' && selectedApartmentId) {
+      // If we are in apartment view, go back to dashboard
+      setSelectedApartmentId(null);
+      setViewMode('dashboard');
+    } else {
+      // Otherwise go back to Home Screen
+      setAppMode('home');
     }
-  };
+  }, [viewMode, selectedApartmentId]);
 
   // --- Derived State ---
   const activeApartment = useMemo(() =>
@@ -541,25 +560,130 @@ function AuthenticatedApp() {
   if (appMode === 'home') {
     return (
       <>
-        {/* Migration Prompt - show when there's localStorage data */}
-        {currentTeam && (
-          <Suspense fallback={null}>
-            <MigrationPrompt
-              teamId={currentTeam.id}
-              onMigrationComplete={() => {
-                // Refresh data after migration
-                setApartments(loadApartments());
-              }}
-            />
-          </Suspense>
-        )}
-        {/* Admin roles (dev, owner, bdm) see AdminDashboard */}
+
+        {/* Admin roles (dev, owner, bdm) see AdminDashboard with Sidebar */}
         {isAdminRole ? (
-          <AdminDashboard
-            onSelectMode={setAppMode}
-            apartments={apartments}
-            onQuickResume={handleQuickResume}
-          />
+          <Layout
+            isSidebarOpen={isSidebarOpen}
+            onSidebarClose={() => setIsSidebarOpen(false)}
+            sidebar={
+              <Sidebar
+                isOpen={isSidebarOpen}
+                onClose={() => setIsSidebarOpen(false)}
+                onGoHome={() => setAppMode('home')}
+                viewMode={viewMode}
+                setViewMode={setViewMode}
+                selectedApartmentId={selectedApartmentId}
+                onSelectApartment={(id) => {
+                  setSelectedApartmentId(id);
+                  if (id) {
+                    setViewMode('apartment');
+                    setAppMode('residential');
+                    if (window.innerWidth < 768) setIsSidebarOpen(false);
+                  }
+                }}
+                apartments={apartments}
+                onCreateApartment={handleCreateApartment}
+                onDeleteApartment={handleDeleteApartment}
+                onExportCSV={() => exportToCSV(apartments)}
+                connectionState={connectionState}
+              />
+            }
+          >
+            <MobileHeader
+              title={viewMode === 'global' ? 'Global Overview' :
+                viewMode === 'leaderboard' ? 'Leaderboard' :
+                  viewMode === 'goals' ? 'Goals' :
+                    viewMode === 'team' ? 'Team' :
+                      viewMode === 'accessibility' ? 'Accessibility' :
+                        viewMode === 'profile' ? 'My Profile' :
+                          'Admin Dashboard'}
+              subtitle={currentTeam?.name}
+              onMenuClick={() => setIsSidebarOpen(true)}
+            />
+            {viewMode === 'global' ? (
+              <div className="h-full overflow-y-auto">
+                <div className="hidden md:block px-8 py-6 bg-white dark:bg-slate-900 border-b border-slate-200/60 dark:border-slate-800 sticky top-0 z-10">
+                  <h1 className="text-3xl font-bold text-slate-800 dark:text-slate-100 tracking-tight">Global Overview</h1>
+                  <p className="text-slate-500 dark:text-slate-400 mt-1">Manage all teams across the organization.</p>
+                </div>
+                <div className="p-4 md:p-8">
+                  <Suspense fallback={<LoadingFallback />}>
+                    <GlobalDashboard onInspectTeam={() => setViewMode('dashboard')} />
+                  </Suspense>
+                </div>
+              </div>
+            ) : viewMode === 'leaderboard' ? (
+              <div className="h-full overflow-y-auto">
+                <div className="hidden md:block px-8 py-6 bg-white dark:bg-slate-900 border-b border-slate-200/60 dark:border-slate-800 sticky top-0 z-10">
+                  <h1 className="text-3xl font-bold text-slate-800 dark:text-slate-100 tracking-tight">Leaderboard</h1>
+                  <p className="text-slate-500 dark:text-slate-400 mt-1">Top performers across your team.</p>
+                </div>
+                <div className="p-4 md:p-8">
+                  <Suspense fallback={<LoadingFallback />}>
+                    <LeaderboardView apartments={apartments} />
+                  </Suspense>
+                </div>
+              </div>
+            ) : viewMode === 'goals' ? (
+              <div className="h-full overflow-y-auto">
+                <div className="hidden md:block px-8 py-6 bg-white dark:bg-slate-900 border-b border-slate-200/60 dark:border-slate-800 sticky top-0 z-10">
+                  <h1 className="text-3xl font-bold text-slate-800 dark:text-slate-100 tracking-tight">Goals & Achievements</h1>
+                  <p className="text-slate-500 dark:text-slate-400 mt-1">Track your daily targets and streaks.</p>
+                </div>
+                <div className="p-4 md:p-8 max-w-2xl mx-auto">
+                  <Suspense fallback={<LoadingFallback />}>
+                    <DailyChallengesUI />
+                    <div className="mt-8">
+                      <GoalTracker />
+                    </div>
+                  </Suspense>
+                </div>
+              </div>
+            ) : viewMode === 'team' ? (
+              <div className="h-full overflow-y-auto">
+                <div className="hidden md:block px-8 py-6 bg-white dark:bg-slate-900 border-b border-slate-200/60 dark:border-slate-800 sticky top-0 z-10">
+                  <h1 className="text-3xl font-bold text-slate-800 dark:text-slate-100 tracking-tight">Team Collaboration</h1>
+                  <p className="text-slate-500 dark:text-slate-400 mt-1">Manage volunteers and share data.</p>
+                </div>
+                <div className="p-4 md:p-8 max-w-2xl mx-auto">
+                  <Suspense fallback={<LoadingFallback />}>
+                    <TeamPanel />
+                  </Suspense>
+                </div>
+              </div>
+            ) : viewMode === 'accessibility' ? (
+              <div className="h-full overflow-y-auto">
+                <div className="hidden md:block px-8 py-6 bg-white dark:bg-slate-900 border-b border-slate-200/60 dark:border-slate-800 sticky top-0 z-10">
+                  <h1 className="text-3xl font-bold text-slate-800 dark:text-slate-100 tracking-tight">Accessibility Settings</h1>
+                  <p className="text-slate-500 dark:text-slate-400 mt-1">Customize the app for better usability.</p>
+                </div>
+                <div className="p-4 md:p-8 max-w-2xl mx-auto">
+                  <Suspense fallback={<LoadingFallback />}>
+                    <AccessibilityPanel />
+                  </Suspense>
+                </div>
+              </div>
+            ) : viewMode === 'profile' ? (
+              <div className="h-full overflow-y-auto">
+                <div className="hidden md:block px-8 py-6 bg-white dark:bg-slate-900 border-b border-slate-200/60 dark:border-slate-800 sticky top-0 z-10">
+                  <h1 className="text-3xl font-bold text-slate-800 dark:text-slate-100 tracking-tight">My Profile</h1>
+                  <p className="text-slate-500 dark:text-slate-400 mt-1">View your progress and stats.</p>
+                </div>
+                <div className="p-4 md:p-8 max-w-2xl mx-auto">
+                  <Suspense fallback={<LoadingFallback />}>
+                    <VolunteerProfileView />
+                  </Suspense>
+                </div>
+              </div>
+            ) : (
+              <AdminDashboard
+                onSelectMode={setAppMode}
+                apartments={apartments}
+                onQuickResume={handleQuickResume}
+              />
+            )}
+          </Layout>
         ) : (
           /* Team leaders and members see HomeScreen */
           <HomeScreen
@@ -594,6 +718,16 @@ function AuthenticatedApp() {
         <SwipeTutorial onDismiss={dismissTutorial} />
       )}
 
+      {/* Milestone Celebration */}
+      {showMilestone && (
+        <Suspense fallback={null}>
+          <MilestoneCelebration
+            {...showMilestone}
+            onClose={() => setShowMilestone(null)}
+          />
+        </Suspense>
+      )}
+
       <Layout
         isSidebarOpen={isSidebarOpen}
         onSidebarClose={() => setIsSidebarOpen(false)}
@@ -616,7 +750,6 @@ function AuthenticatedApp() {
             onCreateApartment={handleCreateApartment}
             onDeleteApartment={handleDeleteApartment}
             onExportCSV={() => exportToCSV(apartments)}
-            onOpenRestoration={() => setShowDataModal(true)}
             connectionState={connectionState}
           />
         }
@@ -628,11 +761,14 @@ function AuthenticatedApp() {
                 viewMode === 'team' ? 'Team & Share' :
                   viewMode === 'leaderboard' ? 'Leaderboard' :
                     viewMode === 'global' ? 'Global Overview' :
+
                       viewMode === 'accessibility' ? 'Accessibility' :
-                        activeApartment?.name || 'DoorStep'
+                        viewMode === 'profile' ? 'My Profile' :
+                          activeApartment?.name || 'DoorStep'
           }
           subtitle={activeApartment && viewMode === 'apartment' ? `${activeApartment.floors} Floors • ${activeApartment.unitsPerFloor} Units` : undefined}
           onMenuClick={() => setIsSidebarOpen(true)}
+          onBack={viewMode === 'apartment' ? () => { setSelectedApartmentId(null); setViewMode('dashboard'); } : () => setAppMode('home')}
           onSettingsClick={activeApartment && viewMode === 'apartment' ? () => setEditingApartment(activeApartment) : undefined}
           showSearch={viewMode === 'apartment' && !!activeApartment}
           searchQuery={searchQuery}
@@ -671,7 +807,10 @@ function AuthenticatedApp() {
             </div>
             <div className="p-4 md:p-8 max-w-2xl mx-auto">
               <Suspense fallback={<LoadingFallback />}>
-                <GoalTracker apartments={apartments} />
+                <DailyChallengesUI />
+                <div className="mt-8">
+                  <GoalTracker />
+                </div>
               </Suspense>
             </div>
           </div>
@@ -683,14 +822,7 @@ function AuthenticatedApp() {
             </div>
             <div className="p-4 md:p-8 max-w-2xl mx-auto">
               <Suspense fallback={<LoadingFallback />}>
-                <TeamPanel
-                  apartments={apartments}
-                  onImportData={(imported) => {
-                    if (confirm('This will add imported campaigns to your existing data. Continue?')) {
-                      setApartments(prev => [...prev, ...imported]);
-                    }
-                  }}
-                />
+                <TeamPanel />
               </Suspense>
             </div>
           </div>
@@ -714,7 +846,7 @@ function AuthenticatedApp() {
             </div>
             <div className="p-4 md:p-8">
               <Suspense fallback={<LoadingFallback />}>
-                <GlobalDashboard />
+                <GlobalDashboard onInspectTeam={() => setViewMode('dashboard')} />
               </Suspense>
             </div>
           </div>
@@ -778,6 +910,8 @@ function AuthenticatedApp() {
           <Suspense fallback={null}>
             <RoomModal
               room={activeRoom}
+              apartmentId={editingRoom.apartmentId}
+              floor={Number(editingRoom.floor)}
               isOpen={!!editingRoom}
               onClose={() => setEditingRoom(null)}
               onSave={handleUpdateRoom}
@@ -785,28 +919,7 @@ function AuthenticatedApp() {
           </Suspense>
         )}
 
-        {/* Restore Data Modal */}
-        <Modal
-          isOpen={showDataModal}
-          onClose={() => setShowDataModal(false)}
-          title="Backup & Restore"
-        >
-          <div className="space-y-4">
-            <p className="text-sm text-slate-600 dark:text-slate-300">
-              Safeguard your data by exporting it regularly. You can restore it anytime by uploading the backup file.
-            </p>
 
-            <div className="grid grid-cols-2 gap-4">
-              <label className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer transition-colors group">
-                <input type="file" className="hidden" accept=".json" onChange={handleImportData} />
-                <div className="w-10 h-10 bg-blue-50 dark:bg-blue-900/20 text-blue-500 rounded-full flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" x2="12" y1="3" y2="15" /></svg>
-                </div>
-                <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Restore from File</span>
-              </label>
-            </div>
-          </div>
-        </Modal>
 
         {/* Edit Apartment Structure Modal */}
         {editingApartment && (

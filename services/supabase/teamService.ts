@@ -67,28 +67,28 @@ export interface UpdateTeamInput {
  */
 async function generateUniqueTeamCode(): Promise<string> {
   const maxAttempts = 5;
-  
+
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const code = generateTeamCode();
-    
+
     // Check if code already exists
     const { data, error } = await supabase
       .from('teams')
       .select('id')
       .eq('team_code', code)
       .maybeSingle();
-    
+
     if (error) {
       console.error('Error checking team code uniqueness:', error.message);
       continue;
     }
-    
+
     // If no existing team with this code, return it
     if (!data) {
       return code;
     }
   }
-  
+
   throw new Error('Failed to generate unique team code after multiple attempts');
 }
 
@@ -102,18 +102,18 @@ export async function createTeam(
   try {
     // Get current user
     const { data: { user } } = await supabase.auth.getUser();
-    
+
     if (!user) {
       return { success: false, error: 'Not authenticated' };
     }
 
     // Check user role - only Owner and BDM can create teams
     const userRole = await getCurrentUserRole();
-    
+
     if (!userRole || !['dev', 'owner', 'bdm'].includes(userRole)) {
-      return { 
-        success: false, 
-        error: 'You do not have permission to create teams' 
+      return {
+        success: false,
+        error: 'You do not have permission to create teams'
       };
     }
 
@@ -174,7 +174,7 @@ export async function joinTeam(
   try {
     // Get current user
     const { data: { user } } = await supabase.auth.getUser();
-    
+
     if (!user) {
       return { success: false, error: 'Not authenticated' };
     }
@@ -241,15 +241,15 @@ export async function joinTeam(
  * Gets all teams the current user belongs to
  * Requirements: 3.5
  */
-export async function getUserTeams(): Promise<{ 
-  success: boolean; 
-  teams?: (Team & { team_role: TeamRole })[]; 
-  error?: string 
+export async function getUserTeams(): Promise<{
+  success: boolean;
+  teams?: (Team & { team_role: TeamRole })[];
+  error?: string
 }> {
   try {
     // Get current user
     const { data: { user } } = await supabase.auth.getUser();
-    
+
     if (!user) {
       return { success: false, error: 'Not authenticated' };
     }
@@ -285,6 +285,51 @@ export async function getUserTeams(): Promise<{
       }));
 
     return { success: true, teams };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Failed to fetch teams';
+    return { success: false, error: message };
+  }
+}
+
+/**
+ * Gets all teams in the system (Admin only: dev/owner/bdm)
+ * Used by GlobalDashboard for organization-wide overview
+ */
+export async function getAllTeams(): Promise<{
+  success: boolean;
+  teams?: Team[];
+  error?: string
+}> {
+  try {
+    // Get current user
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+      return { success: false, error: 'Not authenticated' };
+    }
+
+    // Check user role - only admin roles can view all teams
+    const userRole = await getCurrentUserRole();
+
+    if (!userRole || !['dev', 'owner', 'bdm'].includes(userRole)) {
+      return {
+        success: false,
+        error: 'You do not have permission to view all teams'
+      };
+    }
+
+    // Fetch all teams
+    const { data, error } = await supabase
+      .from('teams')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching all teams:', error.message);
+      return { success: false, error: 'Failed to fetch teams' };
+    }
+
+    return { success: true, teams: data as Team[] };
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to fetch teams';
     return { success: false, error: message };
@@ -417,7 +462,7 @@ export async function removeMember(
   try {
     // Get current user
     const { data: { user } } = await supabase.auth.getUser();
-    
+
     if (!user) {
       return { success: false, error: 'Not authenticated' };
     }
@@ -429,7 +474,7 @@ export async function removeMember(
 
     // Check current user's global role
     const userRole = await getCurrentUserRole();
-    
+
     // Check if user is admin (dev, owner, bdm)
     const isAdmin = userRole && ['dev', 'owner', 'bdm'].includes(userRole);
 
@@ -443,9 +488,9 @@ export async function removeMember(
         .maybeSingle();
 
       if (!membership || membership.team_role !== 'leader') {
-        return { 
-          success: false, 
-          error: 'You do not have permission to remove team members' 
+        return {
+          success: false,
+          error: 'You do not have permission to remove team members'
         };
       }
     }
@@ -481,14 +526,14 @@ export async function updateTeam(
   try {
     // Get current user
     const { data: { user } } = await supabase.auth.getUser();
-    
+
     if (!user) {
       return { success: false, error: 'Not authenticated' };
     }
 
     // Check current user's global role
     const userRole = await getCurrentUserRole();
-    
+
     // Check if user is admin (dev, owner, bdm)
     const isAdmin = userRole && ['dev', 'owner', 'bdm'].includes(userRole);
 
@@ -502,9 +547,9 @@ export async function updateTeam(
         .maybeSingle();
 
       if (!membership || membership.team_role !== 'leader') {
-        return { 
-          success: false, 
-          error: 'You do not have permission to update this team' 
+        return {
+          success: false,
+          error: 'You do not have permission to update this team'
         };
       }
     }
@@ -558,14 +603,14 @@ export async function updateMemberRole(
   try {
     // Get current user
     const { data: { user } } = await supabase.auth.getUser();
-    
+
     if (!user) {
       return { success: false, error: 'Not authenticated' };
     }
 
     // Check current user's global role
     const userRole = await getCurrentUserRole();
-    
+
     // Check if user is admin (dev, owner, bdm)
     const isAdmin = userRole && ['dev', 'owner', 'bdm'].includes(userRole);
 
@@ -579,9 +624,9 @@ export async function updateMemberRole(
         .maybeSingle();
 
       if (!membership || membership.team_role !== 'leader') {
-        return { 
-          success: false, 
-          error: 'You do not have permission to update member roles' 
+        return {
+          success: false,
+          error: 'You do not have permission to update member roles'
         };
       }
     }
@@ -613,7 +658,7 @@ export async function isTeamMember(
 ): Promise<boolean> {
   try {
     const { data: { user } } = await supabase.auth.getUser();
-    
+
     if (!user) {
       return false;
     }
@@ -640,7 +685,7 @@ export async function getUserTeamRole(
 ): Promise<TeamRole | null> {
   try {
     const { data: { user } } = await supabase.auth.getUser();
-    
+
     if (!user) {
       return null;
     }
@@ -667,7 +712,7 @@ export async function leaveTeam(
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const { data: { user } } = await supabase.auth.getUser();
-    
+
     if (!user) {
       return { success: false, error: 'Not authenticated' };
     }
@@ -687,9 +732,9 @@ export async function leaveTeam(
         .eq('team_id', teamId);
 
       if (count && count > 1) {
-        return { 
-          success: false, 
-          error: 'You are the only team leader. Please assign another leader before leaving.' 
+        return {
+          success: false,
+          error: 'You are the only team leader. Please assign another leader before leaving.'
         };
       }
     }

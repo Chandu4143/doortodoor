@@ -11,6 +11,7 @@ export interface UserProfile {
   phone: string;
   name: string;
   email?: string;
+  avatar_url?: string;
   role: UserRole;
   accessibility_settings: AccessibilitySettings;
   created_at: string;
@@ -21,6 +22,7 @@ export interface UserProfile {
 export interface ProfileInput {
   name: string;
   email?: string;
+  phone?: string;
   accessibility_settings?: AccessibilitySettings;
 }
 
@@ -67,7 +69,7 @@ export async function getProfile(userId: string): Promise<UserProfile | null> {
 export async function getCurrentProfile(): Promise<UserProfile | null> {
   try {
     const { data: { user } } = await supabase.auth.getUser();
-    
+
     if (!user) {
       return null;
     }
@@ -88,7 +90,7 @@ export async function upsertProfile(
 ): Promise<{ success: boolean; profile?: UserProfile; error?: string }> {
   try {
     const { data: { user } } = await supabase.auth.getUser();
-    
+
     if (!user) {
       return { success: false, error: 'Not authenticated' };
     }
@@ -139,7 +141,7 @@ export async function updateProfile(
 ): Promise<{ success: boolean; profile?: UserProfile; error?: string }> {
   try {
     const { data: { user } } = await supabase.auth.getUser();
-    
+
     if (!user) {
       return { success: false, error: 'Not authenticated' };
     }
@@ -218,7 +220,7 @@ export async function getUserRole(userId: string): Promise<UserRole | null> {
 export async function getCurrentUserRole(): Promise<UserRole | null> {
   try {
     const { data: { user } } = await supabase.auth.getUser();
-    
+
     if (!user) {
       return null;
     }
@@ -239,7 +241,7 @@ export async function updateAccessibilitySettings(
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const { data: { user } } = await supabase.auth.getUser();
-    
+
     if (!user) {
       return { success: false, error: 'Not authenticated' };
     }
@@ -271,7 +273,7 @@ export async function updateAccessibilitySettings(
 export async function getAccessibilitySettings(): Promise<AccessibilitySettings> {
   try {
     const profile = await getCurrentProfile();
-    
+
     if (!profile || !profile.accessibility_settings) {
       return DEFAULT_ACCESSIBILITY_SETTINGS;
     }
@@ -381,23 +383,23 @@ export async function updateUserRole(
   try {
     // Get current user
     const { data: { user } } = await supabase.auth.getUser();
-    
+
     if (!user) {
       return { success: false, error: 'Not authenticated' };
     }
 
     // Get current user's role
     const currentUserRole = await getUserRole(user.id);
-    
+
     if (!currentUserRole) {
       return { success: false, error: 'Could not determine your role' };
     }
 
     // Check if current user can assign the target role
     if (!canAssignRole(currentUserRole, newRole)) {
-      return { 
-        success: false, 
-        error: 'You do not have permission to assign this role' 
+      return {
+        success: false,
+        error: 'You do not have permission to assign this role'
       };
     }
 
@@ -407,14 +409,14 @@ export async function updateUserRole(
     // Check max owners constraint if assigning owner role
     if (newRole === 'owner') {
       const ownerCount = await countOwners();
-      
+
       // If target is already an owner, don't count them twice
       const effectiveCount = targetCurrentRole === 'owner' ? ownerCount : ownerCount;
-      
+
       if (effectiveCount >= MAX_OWNERS && targetCurrentRole !== 'owner') {
-        return { 
-          success: false, 
-          error: `Cannot add more owners. Maximum of ${MAX_OWNERS} owners allowed` 
+        return {
+          success: false,
+          error: `Cannot add more owners. Maximum of ${MAX_OWNERS} owners allowed`
         };
       }
     }
@@ -455,36 +457,36 @@ export async function demoteOwner(
   try {
     // Get current user
     const { data: { user } } = await supabase.auth.getUser();
-    
+
     if (!user) {
       return { success: false, error: 'Not authenticated' };
     }
 
     // Get current user's role - only dev can demote owners
     const currentUserRole = await getUserRole(user.id);
-    
+
     if (currentUserRole !== 'dev') {
-      return { 
-        success: false, 
-        error: 'Only developers can demote owners' 
+      return {
+        success: false,
+        error: 'Only developers can demote owners'
       };
     }
 
     // Verify target is actually an owner
     const targetCurrentRole = await getUserRole(targetUserId);
-    
+
     if (targetCurrentRole !== 'owner') {
-      return { 
-        success: false, 
-        error: 'Target user is not an owner' 
+      return {
+        success: false,
+        error: 'Target user is not an owner'
       };
     }
 
     // Cannot demote to owner or dev
     if (newRole === 'owner' || newRole === 'dev') {
-      return { 
-        success: false, 
-        error: 'Invalid demotion target role' 
+      return {
+        success: false,
+        error: 'Invalid demotion target role'
       };
     }
 

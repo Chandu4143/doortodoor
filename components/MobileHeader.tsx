@@ -1,5 +1,5 @@
 import React from 'react';
-import { Menu, Settings, Building2, Search, X } from 'lucide-react';
+import { Menu, Settings, Building2, Search, X, ChevronLeft } from 'lucide-react';
 import { Apartment } from '../types';
 
 interface MobileHeaderProps {
@@ -11,8 +11,9 @@ interface MobileHeaderProps {
     searchQuery?: string;
     onSearchChange?: (val: string) => void;
     onSearchClear?: () => void;
-    timeFilter: 'all' | 'today' | 'yesterday';
-    onTimeFilterChange: (val: 'all' | 'today' | 'yesterday') => void;
+    timeFilter?: 'all' | 'today' | 'yesterday';
+    onTimeFilterChange?: (val: 'all' | 'today' | 'yesterday') => void;
+    onBack?: () => void;
 }
 
 export default function MobileHeader({
@@ -25,15 +26,22 @@ export default function MobileHeader({
     onSearchChange,
     onSearchClear,
     timeFilter,
-    onTimeFilterChange
+    onTimeFilterChange,
+    onBack
 }: MobileHeaderProps) {
     return (
         <div className="md:hidden flex flex-col bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200/60 dark:border-slate-800 sticky top-0 z-20">
             <div className="flex items-center justify-between p-4 pb-2">
                 <div className="flex items-center gap-3">
-                    <button onClick={onMenuClick} className="p-2 -ml-2 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg active:scale-95 transition-transform">
-                        <Menu size={24} />
-                    </button>
+                    {onBack ? (
+                        <button onClick={onBack} className="p-2 -ml-2 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg active:scale-95 transition-transform">
+                            <ChevronLeft size={24} />
+                        </button>
+                    ) : (
+                        <button onClick={onMenuClick} className="p-2 -ml-2 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg active:scale-95 transition-transform">
+                            <Menu size={24} />
+                        </button>
+                    )}
                     <div>
                         <h1 className="font-bold text-lg text-slate-800 dark:text-slate-100 truncate max-w-[200px] leading-tight">
                             {title}

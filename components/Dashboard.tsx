@@ -1,17 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-  Legend
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  PieChart, Pie, Cell, Legend
 } from 'recharts';
 import { Sparkles, Loader2, TrendingUp, Users, Wallet, ArrowRight, Building, Map, Target, Plus, Rocket } from 'lucide-react';
 import { Apartment, Room } from '../types';
@@ -21,6 +12,7 @@ import TodaysTasks from './TodaysTasks';
 import { DashboardSkeleton } from './ui/SkeletonLoader';
 import AnnouncementBanner from './AnnouncementBanner';
 import CampaignMap from './CampaignMap';
+import DashboardLayout from './ui/DashboardLayout';
 
 interface DashboardProps {
   apartments: Apartment[];
@@ -56,6 +48,7 @@ const Dashboard: React.FC<DashboardProps> = ({ apartments, onRoomClick, onCreate
   };
 
   const apartmentData = apartments.map(apt => {
+
     let aptDonations = 0;
     Object.values(apt.rooms).forEach((floor: Room[]) => {
       floor.forEach(room => {
@@ -174,8 +167,7 @@ const Dashboard: React.FC<DashboardProps> = ({ apartments, onRoomClick, onCreate
   const coveragePercent = Math.round((visitedCount / Math.max(totalRooms, 1)) * 100);
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-10">
-
+    <DashboardLayout>
       {/* Top Controls */}
       <div className="flex justify-between items-center mb-4">
         <div className="flex-1"></div>
@@ -184,8 +176,8 @@ const Dashboard: React.FC<DashboardProps> = ({ apartments, onRoomClick, onCreate
           <button
             onClick={() => setViewMode('list')}
             className={`px-3 py-1.5 rounded-lg text-sm font-bold flex items-center gap-2 transition-all ${viewMode === 'list'
-                ? 'bg-white dark:bg-slate-700 shadow-sm text-blue-600 dark:text-blue-400'
-                : 'text-slate-500 dark:text-slate-400 hover:text-slate-700'
+              ? 'bg-white dark:bg-slate-700 shadow-sm text-blue-600 dark:text-blue-400'
+              : 'text-slate-500 dark:text-slate-400 hover:text-slate-700'
               }`}
           >
             <Building size={16} /> List
@@ -193,8 +185,8 @@ const Dashboard: React.FC<DashboardProps> = ({ apartments, onRoomClick, onCreate
           <button
             onClick={() => setViewMode('map')}
             className={`px-3 py-1.5 rounded-lg text-sm font-bold flex items-center gap-2 transition-all ${viewMode === 'map'
-                ? 'bg-white dark:bg-slate-700 shadow-sm text-blue-600 dark:text-blue-400'
-                : 'text-slate-500 dark:text-slate-400 hover:text-slate-700'
+              ? 'bg-white dark:bg-slate-700 shadow-sm text-blue-600 dark:text-blue-400'
+              : 'text-slate-500 dark:text-slate-400 hover:text-slate-700'
               }`}
           >
             <Map size={16} /> Map
@@ -555,7 +547,7 @@ const Dashboard: React.FC<DashboardProps> = ({ apartments, onRoomClick, onCreate
           </div>
         </>
       )}
-    </div>
+    </DashboardLayout>
   );
 };
 

@@ -8,7 +8,6 @@ import React, { useState } from 'react';
 import {
   Home,
   LayoutGrid,
-  Database,
   Plus,
   Briefcase,
   Trash2,
@@ -20,7 +19,6 @@ import {
   Users,
   Accessibility,
   Wifi,
-  WifiOff,
   LogOut,
   User
 } from 'lucide-react';
@@ -34,15 +32,14 @@ interface CorporateSidebarProps {
   isOpen: boolean;
   onClose: () => void;
   onGoHome: () => void;
-  viewMode: 'dashboard' | 'campaign' | 'goals' | 'team' | 'accessibility';
-  setViewMode: (mode: 'dashboard' | 'campaign' | 'goals' | 'team' | 'accessibility') => void;
+  viewMode: 'dashboard' | 'campaign' | 'goals' | 'team' | 'accessibility' | 'profile';
+  setViewMode: (mode: 'dashboard' | 'campaign' | 'goals' | 'team' | 'accessibility' | 'profile') => void;
   selectedCampaignId: string | null;
   onSelectCampaign: (id: string | null) => void;
   campaigns: BusinessCampaign[];
   onCreateCampaign: (name: string, area: string, target: number) => void;
   onDeleteCampaign: (id: string) => void;
   onExportCSV: () => void;
-  onOpenRestoration: () => void;
   connectionState?: ConnectionState;
 }
 
@@ -58,7 +55,6 @@ export default function CorporateSidebar({
   onCreateCampaign,
   onDeleteCampaign,
   onExportCSV,
-  onOpenRestoration,
   connectionState = 'disconnected'
 }: CorporateSidebarProps) {
   const { profile, currentTeam, signOut } = useAuth();
@@ -79,15 +75,11 @@ export default function CorporateSidebar({
   // Connection status indicator
   const ConnectionIndicator = () => {
     const isConnected = connectionState === 'connected';
+    if (!isConnected) return null;
     return (
-      <div className={cn(
-        "flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded-full",
-        isConnected 
-          ? "text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20" 
-          : "text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800"
-      )}>
-        {isConnected ? <Wifi size={12} /> : <WifiOff size={12} />}
-        {isConnected ? 'Synced' : 'Offline'}
+      <div className="flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded-full text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20">
+        <Wifi size={12} />
+        Synced
       </div>
     );
   };
@@ -101,7 +93,10 @@ export default function CorporateSidebar({
       )}
     >
       <div className="p-5 flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-3 text-slate-800 dark:text-slate-100 font-bold text-xl tracking-tight">
+        <div
+          onClick={onGoHome}
+          className="flex items-center gap-3 text-slate-800 dark:text-slate-100 font-bold text-xl tracking-tight cursor-pointer hover:opacity-80 transition-opacity"
+        >
           <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white shadow-blue-200 dark:shadow-blue-900/50 shadow-lg">
             <Briefcase size={18} strokeWidth={2.5} />
           </div>
@@ -114,34 +109,36 @@ export default function CorporateSidebar({
           </button>
         </div>
       </div>
-      
-      {/* User & Team Info */}
-      {profile && (
-        <div className="px-4 pb-4 border-b border-slate-100 dark:border-slate-800">
-          <div className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
-            <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center">
-              <User size={18} className="text-blue-600 dark:text-blue-400" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-slate-800 dark:text-slate-200 truncate">
-                {profile.name}
-              </p>
-              <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
-                {currentTeam?.name || 'No team'}
-              </p>
-            </div>
-            <button
-              onClick={signOut}
-              className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-              title="Sign out"
-            >
-              <LogOut size={16} />
-            </button>
-          </div>
-        </div>
-      )}
 
       <div className="px-4 py-2 flex-1 overflow-y-auto space-y-6 custom-scrollbar">
+
+        {/* Current Team Indicator */}
+        {currentTeam && (
+          <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-100 dark:border-blue-800">
+            <p className="text-[10px] uppercase font-bold text-blue-500 dark:text-blue-400 mb-1">Current Team</p>
+            <p className="text-sm font-bold text-slate-800 dark:text-white truncate">{currentTeam.name}</p>
+          </div>
+        )}
+
+        {/* Profile Card Mini */}
+        {profile && (
+          <button
+            onClick={() => { setViewMode('profile'); onSelectCampaign(null); }}
+            className="mb-4 w-full p-3 flex items-center gap-3 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 hover:shadow-md transition-all text-left group"
+          >
+            <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-700 overflow-hidden flex items-center justify-center shrink-0">
+              {profile.avatar_url ? (
+                <img src={profile.avatar_url} alt={profile.name} className="w-full h-full object-cover" />
+              ) : (
+                <User size={20} className="text-slate-400" />
+              )}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-bold text-slate-800 dark:text-white truncate">{profile.name}</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 truncate capitalize">{profile.role}</p>
+            </div>
+          </button>
+        )}
 
         {/* Main Nav */}
         <div className="space-y-1">
@@ -200,13 +197,7 @@ export default function CorporateSidebar({
             <Accessibility size={20} className={viewMode === 'accessibility' ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400'} />
             Accessibility
           </button>
-          <button
-            onClick={onOpenRestoration}
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-200 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-200"
-          >
-            <Database size={20} className="text-slate-400" />
-            Backup & Restore
-          </button>
+
         </div>
 
         {/* Campaigns List */}
@@ -344,6 +335,20 @@ export default function CorporateSidebar({
           <Download size={16} className="group-hover:-translate-y-0.5 transition-transform" />
           Export CSV
         </button>
+      </div>
+
+      {/* Footer */}
+      <div className="p-4 border-t border-slate-200/60 dark:border-slate-800 shrink-0 bg-slate-50/50 dark:bg-slate-900/50">
+        <button
+          onClick={signOut}
+          className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-red-50 dark:bg-red-900/10 text-red-600 dark:text-red-400 rounded-xl font-bold hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors"
+        >
+          <LogOut size={18} />
+          Sign Out
+        </button>
+        <div className="mt-3 text-center">
+          <p className="text-[10px] text-slate-400 font-medium">DoorStep v0.9.2 (Beta)</p>
+        </div>
       </div>
     </aside>
   );

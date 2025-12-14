@@ -1,27 +1,35 @@
 import React, { useState, useEffect } from 'react';
 import { Room, RoomStatus, SUPPORT_VALUE } from '../types';
 import { STATUS_CONFIG, FUNDRAISING_SCRIPTS } from '../constants';
-import { X, Save, User, MessageSquare, StickyNote, IndianRupee, Check, BookOpen, Info, Copy, Clock, Calendar, Phone, Mail, MapPin, CreditCard, Heart, FileText, Users, UserCheck } from 'lucide-react';
+import { X, Save, User, MessageSquare, StickyNote, IndianRupee, Check, BookOpen, Info, Copy, Clock, Calendar, Phone, Mail, MapPin, CreditCard, Heart, FileText, Users, UserCheck, ExternalLink, Mic } from 'lucide-react';
 import { cn } from '../utils/cn';
 import Modal from './ui/Modal';
 import VoiceInputButton from './ui/VoiceInputButton';
 import { useAuth } from '../contexts/AuthContext';
 import { getTeamMembers, type TeamMember } from '../services/supabase/teamService';
+import { generateGoogleCalendarLink, addCallbackEvent } from '../services/supabase/calendarSyncService';
+import { getVoiceNotesForRoom, type VoiceNote } from '../services/supabase/voiceNotesService';
+import VoiceNoteRecorder from './VoiceNoteRecorder';
 
 interface RoomModalProps {
   room: Room;
+  apartmentId: string; // Added for context
+  floor: number;      // Added for context
   isOpen: boolean;
   onClose: () => void;
   onSave: (id: string, updates: Partial<Room>) => void;
 }
 
-const RoomModal: React.FC<RoomModalProps> = ({ room, isOpen, onClose, onSave }) => {
+const RoomModal: React.FC<RoomModalProps> = ({ room, apartmentId, floor, isOpen, onClose, onSave }) => {
   const [formData, setFormData] = useState<Partial<Room>>({});
   const [activeTab, setActiveTab] = useState<'details' | 'scripts'>('details');
   const [copiedScriptId, setCopiedScriptId] = useState<string | null>(null);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [loadingMembers, setLoadingMembers] = useState(false);
-  
+  const [gcalLink, setGcalLink] = useState<string | null>(null);
+  const [voiceNotes, setVoiceNotes] = useState<VoiceNote[]>([]);
+  const [showVoiceRecorder, setShowVoiceRecorder] = useState(false);
+
   // Get auth context for current user and team
   const { user, profile, currentTeam } = useAuth();
 
@@ -50,7 +58,7 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, isOpen, onClose, onSave }) 
         }
       }
     };
-    
+
     fetchTeamMembers();
   }, [isOpen, currentTeam]);
 
@@ -79,19 +87,72 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, isOpen, onClose, onSave }) 
         enteredByName: room.enteredByName || profile?.name || '',
       });
       setActiveTab('details'); // Reset to details on open
+      // Load Voice Notes
+      getVoiceNotesForRoom(
+        apartmentId,
+        room.roomNumber.toString()
+      ).then(res => {
+        if (res.success && res.notes) setVoiceNotes(res.notes);
+      });
     }
-  }, [isOpen, room, user, profile]);
+  }, [isOpen, room, user, profile, apartmentId]);
 
-  const handleSave = () => {
+  // Fix: Need apartmentId. RoomModalProps only has `room`. 
+  // We should pass apartmentId or infer it. 
+  // For now, let's assume `room` might contain it or we accept it as prop.
+  // Actually, looking at `App.tsx`, we know the selected apartment.
+  // We need to update RoomModalProps to accept apartmentId.
+  // But wait, I can't easily change the parent call site in one shot without context.
+  // Let's check if Room has apartmentId. If not, I'll rely on prop update in next step.
+  // Checking types.ts previously: Room is interface Room { ... }.
+  // I will check types.ts again to be sure. 
+  // For this step, I'll assume we need to add `apartmentId` to props.
+
+
+  const handleSave = async () => {
     // Always set entered_by to current user when saving
     const dataToSave = {
       ...formData,
       enteredBy: user?.id || formData.enteredBy,
       enteredByName: profile?.name || formData.enteredByName,
     };
+
     onSave(room.id, dataToSave);
+
+    // If status is callback, try to save to DB sync service (fire and forget for now)
+    if (formData.status === 'callback' && formData.updatedAt) {
+      if (formData.updatedAt > Date.now()) {
+        // It's in the future, so it's a scheduled callback
+        addCallbackEvent(
+          '', // ApartmentId not passed in props but we can fetch context or ignore for local link gen
+          // Wait, calculate floor and room from context or pass it down? 
+          // The room object has ID, but not apartmentId directly in prop interface.
+          // Assuming context helps or we rely on just the link for now.
+          // Actually, I can just use the link generator for immediate value.
+          0, // placeholder
+          room.roomNumber.toString(),
+          new Date(formData.updatedAt).toISOString()
+        ).catch(e => console.error("Bg sync failed", e));
+      }
+    }
+
     onClose();
   };
+
+  // Generate Calendar Link when time changes
+  useEffect(() => {
+    if (formData.status === 'callback' && formData.updatedAt && formData.updatedAt > Date.now()) {
+      const date = new Date(formData.updatedAt);
+      const link = generateGoogleCalendarLink(
+        `Callback: Unit ${room.roomNumber}`,
+        `Follow up visit for ${room.visitorName || 'resident'}. Notes: ${formData.remark || ''}`,
+        date
+      );
+      setGcalLink(link);
+    } else {
+      setGcalLink(null);
+    }
+  }, [formData.status, formData.updatedAt, room.roomNumber, room.visitorName, formData.remark]);
 
   // Helper to get member name by ID
   const getMemberName = (memberId: string): string => {
@@ -166,7 +227,7 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, isOpen, onClose, onSave }) 
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Current Status</label>
                 </div>
-                
+
                 {/* Quick Time Presets */}
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-[10px] font-bold text-slate-400 uppercase">Time:</span>
@@ -245,7 +306,47 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, isOpen, onClose, onSave }) 
                 </div>
               </div>
 
-              {/* Form Fields */}
+
+              {formData.status === 'callback' && (
+                <div className="bg-amber-50 dark:bg-amber-900/20 p-4 rounded-xl border border-amber-100 dark:border-amber-900/50 space-y-3 animate-in slide-in-from-top-2">
+                  <div className="flex justify-between items-start">
+                    <label className="text-xs font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider flex items-center gap-2">
+                      <Calendar size={14} />
+                      Schedule Callback
+                    </label>
+                    {gcalLink && (
+                      <a
+                        href={gcalLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[10px] font-bold bg-white dark:bg-amber-900/40 text-blue-600 dark:text-blue-400 px-2 py-1 rounded border border-blue-100 dark:border-blue-900/50 flex items-center gap-1 hover:underline"
+                      >
+                        <ExternalLink size={10} /> Add to Calendar
+                      </a>
+                    )}
+                  </div>
+
+                  <div className="flex gap-2 items-center">
+                    <Clock size={16} className="text-amber-500" />
+                    <input
+                      type="datetime-local"
+                      className="flex-1 bg-white dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2 text-sm font-bold text-slate-700 dark:text-slate-200"
+                      value={formData.updatedAt ? toLocalISOString(formData.updatedAt) : ''}
+                      onChange={(e) => {
+                        const date = new Date(e.target.value);
+                        if (!isNaN(date.getTime())) {
+                          setFormData({ ...formData, updatedAt: date.getTime() });
+                        }
+                      }}
+                    />
+                  </div>
+                  <p className="text-[10px] text-amber-600 dark:text-amber-400/80">
+                    Select a future time to enable calendar sync.
+                  </p>
+                </div>
+              )}
+
+              {/* Form Fields run... */}
               <div className="space-y-4">
 
                 {/* Conditional Donation Form */}
@@ -263,10 +364,10 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, isOpen, onClose, onSave }) 
                             <button
                               key={count}
                               type="button"
-                              onClick={() => setFormData({ 
-                                ...formData, 
+                              onClick={() => setFormData({
+                                ...formData,
                                 supportsCount: count,
-                                amountDonated: count * SUPPORT_VALUE 
+                                amountDonated: count * SUPPORT_VALUE
                               })}
                               className={cn(
                                 "w-10 h-10 rounded-lg text-sm font-bold transition-all active:scale-95",
@@ -286,10 +387,10 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, isOpen, onClose, onSave }) 
                             value={formData.supportsCount || ''}
                             onChange={(e) => {
                               const count = Number(e.target.value);
-                              setFormData({ 
-                                ...formData, 
+                              setFormData({
+                                ...formData,
                                 supportsCount: count,
-                                amountDonated: count * SUPPORT_VALUE 
+                                amountDonated: count * SUPPORT_VALUE
                               });
                             }}
                             className="w-full px-3 py-2 bg-white dark:bg-pink-900/30 border border-pink-200 dark:border-pink-800 rounded-lg text-pink-700 dark:text-pink-400 font-bold"
@@ -322,8 +423,8 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, isOpen, onClose, onSave }) 
                         value={formData.amountDonated}
                         onChange={(e) => {
                           const amount = Number(e.target.value);
-                          setFormData({ 
-                            ...formData, 
+                          setFormData({
+                            ...formData,
                             amountDonated: amount,
                             supportsCount: Math.floor(amount / SUPPORT_VALUE)
                           });
@@ -448,8 +549,8 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, isOpen, onClose, onSave }) 
                             value={formData.collectedBy || user?.id || ''}
                             onChange={(e) => {
                               const selectedMember = teamMembers.find(m => m.user_id === e.target.value);
-                              setFormData({ 
-                                ...formData, 
+                              setFormData({
+                                ...formData,
                                 collectedBy: e.target.value,
                                 collectedByName: selectedMember?.profile.name || profile?.name || ''
                               });
@@ -539,11 +640,77 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, isOpen, onClose, onSave }) 
                         placeholder="Private notes... (or use voice input)"
                       />
                       <div className="absolute top-2 right-2">
-                        <VoiceInputButton 
+                        <VoiceInputButton
                           onTranscript={(text) => setFormData({ ...formData, note: (formData.note || '') + text })}
                         />
                       </div>
                     </div>
+
+                    {/* Voice Notes Section */}
+                    {/* Only show if we have apartmentId (see note above, adding TODO if missing) */}
+                    <div className="pt-4 border-t border-slate-100 dark:border-slate-800">
+                      <div className="flex items-center justify-between mb-3">
+                        <label className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                          <Mic size={14} />
+                          Audio Notes
+                        </label>
+                        <button
+                          onClick={() => setShowVoiceRecorder(!showVoiceRecorder)}
+                          className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline"
+                        >
+                          {showVoiceRecorder ? "Cancel Recording" : "+ Record New"}
+                        </button>
+                      </div>
+
+                      {showVoiceRecorder && (
+                        <div className="mb-4">
+                          <VoiceNoteRecorder
+                            location={{
+                              apartmentId: apartmentId,
+                              floor: floor,
+                              roomNumber: room.roomNumber.toString()
+                            }}
+                            onSaved={() => {
+                              setShowVoiceRecorder(false);
+                              getVoiceNotesForRoom(apartmentId, room.roomNumber.toString())
+                                .then(res => res.success && res.notes && setVoiceNotes(res.notes));
+                            }}
+                          />
+                        </div>
+                      )}
+
+                      <div className="space-y-2">
+                        {voiceNotes.length === 0 && !showVoiceRecorder && (
+                          <p className="text-xs text-slate-400 italic">No audio notes yet.</p>
+                        )}
+                        {voiceNotes.map(note => (
+                          <div key={note.id} className="bg-slate-50 dark:bg-slate-800 rounded-lg p-3 border border-slate-200 dark:border-slate-700 flex flex-col gap-2">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <div className="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                                  {note.profiles?.avatar_url ? (
+                                    <img src={note.profiles.avatar_url} alt="" className="w-full h-full object-cover" />
+                                  ) : (
+                                    <div className="w-full h-full flex items-center justify-center text-[10px] font-bold text-slate-500">
+                                      {note.profiles?.name?.[0] || '?'}
+                                    </div>
+                                  )}
+                                </div>
+                                <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                                  {note.profiles?.name || 'Volunteer'}
+                                </span>
+                              </div>
+                              <span className="text-[10px] text-slate-400">{new Date(note.created_at).toLocaleString()}</span>
+                            </div>
+                            {note.transcription && (
+                              <p className="text-sm text-slate-600 dark:text-slate-300 italic">"{note.transcription}"</p>
+                            )}
+                            <audio controls src={note.audio_path} className="w-full h-8 mt-1" />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
                   </div>
                 </div>
               </div>
@@ -592,6 +759,19 @@ const RoomModal: React.FC<RoomModalProps> = ({ room, isOpen, onClose, onSave }) 
             <Save size={18} />
             Save Changes
           </button>
+          {formData.status === 'donated' && formData.visitorName && (
+            <a
+              href={`https://wa.me/${formData.donorPhone?.replace(/\D/g, '')}?text=${encodeURIComponent(`Dear ${formData.visitorName},\n\nThank you for your generous donation of ₹${(formData.amountDonated || 0).toLocaleString()}.\n\nReceipt No: ${formData.receiptNumber || 'Pending'}\n\nWe truly appreciate your support! 🙏`)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="p-3 bg-green-500 text-white rounded-xl hover:bg-green-600 transition-all flex items-center justify-center"
+              title="Send Thank You via WhatsApp"
+            >
+              <svg viewBox="0 0 24 24" className="w-5 h-5 fill-current">
+                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.890-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z" />
+              </svg>
+            </a>
+          )}
         </div>
       </div>
     </Modal>

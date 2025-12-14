@@ -83,6 +83,13 @@ export async function syncCreateApartment(teamId: string, input: CreateApartment
         try {
             const result = await createApartment(teamId, input);
             if (!result.success) throw new Error(result.error);
+            
+            // Also create rooms for the apartment
+            if (result.apartment) {
+                const { createRooms } = await import('./supabase/residentialService');
+                await createRooms(result.apartment.id, input.floors, input.units_per_floor);
+            }
+            
             return result;
         } catch (err) {
             console.warn('Online create failed, queuing:', err);
