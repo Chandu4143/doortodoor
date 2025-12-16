@@ -451,7 +451,7 @@ function AuthenticatedApp() {
       return;
     }
 
-    // Create directly in Supabase - it will trigger real-time update to add to state
+    // Create directly in Supabase
     try {
       const result = await syncCreateApartment(currentTeam.id, {
         name,
@@ -462,9 +462,30 @@ function AuthenticatedApp() {
 
       if (result.success) {
         if ('apartment' in result && result.apartment) {
-          // Online success - the real-time subscription will add it to state
-          // but we can also set selection immediately for better UX
-          setSelectedApartmentId(result.apartment.id);
+          // Online success - fetch the rooms and add to state immediately
+          // Don't rely solely on real-time subscription as it may be delayed
+          const apt = result.apartment;
+          const roomsResult = await getRoomsByApartment(apt.id);
+          
+          if (roomsResult.success && roomsResult.rooms) {
+            const convertedApt = convertSupabaseApartment(apt, roomsResult.rooms);
+            // Add to state (filter out any duplicate from real-time)
+            setApartments(prev => [convertedApt, ...prev.filter(a => a.id !== apt.id)]);
+          } else {
+            // Rooms not ready yet, create empty apartment and let real-time update it
+            const emptyApt: Apartment = {
+              id: apt.id,
+              name: apt.name,
+              floors: apt.floors,
+              unitsPerFloor: apt.units_per_floor,
+              createdAt: new Date(apt.created_at).getTime(),
+              targetAmount: apt.target_amount,
+              rooms: {},
+            };
+            setApartments(prev => [emptyApt, ...prev.filter(a => a.id !== apt.id)]);
+          }
+          
+          setSelectedApartmentId(apt.id);
           setViewMode('apartment');
           if (window.innerWidth < 768) setIsSidebarOpen(false);
         } else if ('queued' in result && result.queued) {
@@ -475,6 +496,10 @@ function AuthenticatedApp() {
           setViewMode('apartment');
           if (window.innerWidth < 768) setIsSidebarOpen(false);
         }
+      } else {
+        // Show error to user
+        const errorMsg = 'error' in result ? result.error : 'Failed to create campaign';
+        alert(errorMsg || 'Failed to create campaign. Please try again.');
       }
     } catch (err) {
       console.error('Error creating apartment:', err);

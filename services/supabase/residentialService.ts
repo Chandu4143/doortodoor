@@ -94,7 +94,8 @@ export interface UpdateRoomInput {
 
 
 /**
- * Creates a new apartment for a team
+ * Creates a new apartment for a team with all rooms
+ * Uses a database function to create apartment and rooms in a single transaction
  * Requirements: 8.1
  */
 export async function createApartment(
@@ -119,26 +120,47 @@ export async function createApartment(
       return { success: false, error: 'Units per floor must be at least 1' };
     }
 
-    const { data, error } = await supabase
-      .from('apartments')
-      .insert({
-        team_id: teamId,
-        name: input.name.trim(),
-        floors: input.floors,
-        units_per_floor: input.units_per_floor,
-        target_amount: input.target_amount || 0,
-        latitude: input.latitude,
-        longitude: input.longitude,
-      })
-      .select()
-      .single();
+    // Use the database function to create apartment with rooms in a single transaction
+    const { data, error } = await supabase.rpc('create_apartment_with_rooms', {
+      p_team_id: teamId,
+      p_name: input.name.trim(),
+      p_floors: input.floors,
+      p_units_per_floor: input.units_per_floor,
+      p_target_amount: input.target_amount || 0,
+      p_latitude: input.latitude || null,
+      p_longitude: input.longitude || null,
+    });
 
     if (error) {
-      console.error('Error creating apartment:', error.message);
-      return { success: false, error: 'Failed to create apartment' };
+      console.error('Error creating apartment:', error.message, error);
+      return { success: false, error: error.message || 'Failed to create apartment' };
     }
 
-    return { success: true, apartment: data as SupabaseApartment };
+    // Parse the JSON response from the function
+    // The RPC returns the JSON directly, not wrapped in an array
+    const result = data as { success: boolean; apartment?: Record<string, unknown>; error?: string };
+    
+    console.log('Create apartment result:', result);
+    
+    if (!result || !result.success) {
+      return { success: false, error: result?.error || 'Failed to create apartment' };
+    }
+
+    // Convert the apartment data to the expected format
+    const apartment = result.apartment ? {
+      id: result.apartment.id as string,
+      team_id: result.apartment.team_id as string,
+      name: result.apartment.name as string,
+      floors: result.apartment.floors as number,
+      units_per_floor: result.apartment.units_per_floor as number,
+      target_amount: result.apartment.target_amount as number,
+      latitude: result.apartment.latitude as number | undefined,
+      longitude: result.apartment.longitude as number | undefined,
+      created_at: result.apartment.created_at as string,
+      updated_at: result.apartment.updated_at as string,
+    } as SupabaseApartment : undefined;
+
+    return { success: true, apartment };
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to create apartment';
     return { success: false, error: message };

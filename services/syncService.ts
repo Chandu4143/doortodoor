@@ -81,14 +81,10 @@ export async function syncCreateApartment(teamId: string, input: CreateApartment
 
     if (getOnlineStatus()) {
         try {
+            // The createApartment function now uses a database function that
+            // creates both the apartment and all rooms in a single transaction
             const result = await createApartment(teamId, input);
             if (!result.success) throw new Error(result.error);
-            
-            // Also create rooms for the apartment
-            if (result.apartment) {
-                const { createRooms } = await import('./supabase/residentialService');
-                await createRooms(result.apartment.id, input.floors, input.units_per_floor);
-            }
             
             return result;
         } catch (err) {
